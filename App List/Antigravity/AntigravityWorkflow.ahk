@@ -14,7 +14,7 @@ FocusAgyChat() {
 `:: ToggleVoiceRecording(FocusAgyChat)
 
 ; Helper function to focus the app and prepare the chat
-PrepareAgyChat(
+PrepareAgyIDEChat(
     focusTargetApp := true,
     createNewChat := true,
     newChatShortcut := "",
@@ -62,7 +62,7 @@ PrepareAgyChat(
 
 ; Backtick + 1: Start /grilling flow
 ` & 1:: {
-    PrepareAgyChat(
+    PrepareAgyIDEChat(
         true,        ; focusTargetApp
         true,        ; createNewChat
         "^+l",       ; newChatShortcut
@@ -75,7 +75,7 @@ PrepareAgyChat(
 
 ; Backtick + 2: Start /to-spec flow
 ` & 2:: {
-    PrepareAgyChat(
+    PrepareAgyIDEChat(
         true,       ; focusTargetApp
         true,       ; createNewChat
         "^+l",      ; newChatShortcut
@@ -88,7 +88,7 @@ PrepareAgyChat(
 
 ; Backtick + 3: Start /to-tickets flow
 ` & 3:: {
-    PrepareAgyChat(
+    PrepareAgyIDEChat(
         true,       ; focusTargetApp
         true,       ; createNewChat
         "^+l",      ; newChatShortcut
@@ -101,7 +101,7 @@ PrepareAgyChat(
 
 ; Backtick + 4: Start /implement flow
 ` & 4:: {
-    PrepareAgyChat(
+    PrepareAgyIDEChat(
         true,        ; focusTargetApp
         true,        ; createNewChat
         "^+l",       ; newChatShortcut

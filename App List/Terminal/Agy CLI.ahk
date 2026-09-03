@@ -8,11 +8,10 @@
 `:: ToggleVoiceRecording()
 
 ; Helper function to focus the app and prepare the chat
-PrepareOpencodeChat(
+PrepareAgyChat(
     focusTargetApp := false,
     createNewChat := '',
     setSkill := "",
-    skillName := "",
     additionalText := "",
     useVoice := false
 ) {
@@ -35,12 +34,6 @@ PrepareOpencodeChat(
     if (setSkill != "") {
         TypeText(setSkill)
         Sleep(500)
-        Send("{Enter}")
-        Sleep(500)
-        TypeText(skillName)
-        Sleep(500)
-        Send("{Enter}")
-        Sleep(500)
     }
 
     if (additionalText != "") {
@@ -59,11 +52,10 @@ PrepareOpencodeChat(
 
 ; Backtick + 1: Start /grilling flow
 ` & 1:: {
-    PrepareOpencodeChat(
+    PrepareAgyChat(
         true,        ; focusTargetApp
         '',          ; createNewChat
-        "/skill",    ; addSkill
-        "grilling",  ; skillName
+        "/grilling",  ; skillName
         "",
         true         ; useVoice
     )
@@ -72,11 +64,10 @@ PrepareOpencodeChat(
 
 ; Backtick + 2: Start /to-spec flow
 ` & 2:: {
-    PrepareOpencodeChat(
+    PrepareAgyChat(
         true,        ; focusTargetApp
         '/new',      ; createNewChat
-        "/skill",    ; addSkill
-        "to-spec",   ; skillName
+        "/to-spec",   ; skillName
         "",
         true         ; useVoice
     )
@@ -85,11 +76,10 @@ PrepareOpencodeChat(
 
 ; Backtick + 3: Start /to-tickets flow
 ` & 3:: {
-    PrepareOpencodeChat(
+    PrepareAgyChat(
         true,        ; focusTargetApp
         '/new',      ; createNewChat
-        "/skill",    ; addSkill
-        "to-tickets", ; skillName
+        "/to-tickets", ; skillName
         "Please base the tickets on the spec file created in the previous step.",
         false       ; useVoice
     )
@@ -98,11 +88,10 @@ PrepareOpencodeChat(
 
 ; Backtick + 4: Start /implement flow
 ` & 4:: {
-    PrepareOpencodeChat(
+    PrepareAgyChat(
         true,        ; focusTargetApp
         '/new',      ; createNewChat
-        "/skill",    ; addSkill
-        "implement", ; skillName
+        "/implement", ; skillName
         "implement the tickets created in last step and make sure to implement them parallely whenever they are 'unblocked' and 'ready for agent' start working on them",
         false        ; useVoice
     )

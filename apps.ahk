@@ -7,5 +7,5 @@
 ; Define all your target applications here
 
 Global App_Antigravity := "ahk_exe Antigravity IDE.exe"
-Global App_Terminal := "ahk_exe WindowsTerminal.exe"
-
+Global App_Opencode := "Opencode ahk_exe cmd.exe"
+Global App_Agy := "Agy ahk_exe cmd.exe"

@@ -40,8 +40,20 @@ TypeText(text) {
 ; Brings the target application to the foreground
 FocusApp(targetApp) {
     if !WinActive(targetApp) {
-        WinActivate(targetApp)
-        if !WinWaitActive(targetApp,, 2) {
+        if WinExist(targetApp) {
+            if (WinGetMinMax(targetApp) = -1) {
+                WinMaximize(targetApp)
+            }
+            WinActivate(targetApp)
+        } else {
+            if !WinWait(targetApp, , 10) {
+                ShowMessage("Error: Application did not start in time.")
+                SetTimer(ClearMessage, -3000)
+                return false
+            }
+            WinActivate(targetApp)
+        }
+        if !WinWaitActive(targetApp, , 2) {
             ShowMessage("Error: Could not activate target application.")
             SetTimer(ClearMessage, -3000)
             return false
@@ -54,14 +66,14 @@ ClearTextField() {
     oldClip := A_Clipboard
     A_Clipboard := ""
     Send("^a^c")
-    
+
     if (ClipWait(0.5) && Trim(A_Clipboard) != "") {
         Send("{Backspace}")
         Sleep(500)
     } else {
         Send("{Right}")
     }
-    
+
     A_Clipboard := oldClip
     Sleep(200)
 }
@@ -80,7 +92,7 @@ RunApp(targetApp) {
         SetTimer(ClearMessage, -3000)
         return false
     }
-    
+
     if InStr(content, targetApp) {
         exeName := StrReplace(targetApp, "ahk_exe ", "")
         try {

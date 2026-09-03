@@ -5,6 +5,8 @@
 
 #Include "apps.ahk"
 
+SetTitleMatchMode(2)
+
 Global TargetApp := ""
 
 SelectAppGui() {
@@ -30,13 +32,13 @@ SelectAppGui()
 #Include "comman\AddPrompt.ahk"
 #Include "comman\GenericVoice.ahk"
 
-#HotIf TargetApp == App_Antigravity and WinActive(TargetApp)
+#HotIf TargetApp == App_Antigravity
 #Include "App List\Antigravity\AntigravityWorkflow.ahk"
 
-#HotIf TargetApp == App_Opencode and WinActive(TargetApp)
+#HotIf TargetApp == App_Opencode
 #Include "App List\Terminal\Opencode CLI.ahk"
 
-#HotIf TargetApp == App_Agy and WinActive(TargetApp)
+#HotIf TargetApp == App_Agy
 #Include "App List\Terminal\Agy CLI.ahk"
 
 ; Press Escape to instantly terminate the automation script

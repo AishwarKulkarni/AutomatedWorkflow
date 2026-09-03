@@ -16,10 +16,10 @@ PrepareOpencodeChat(
     additionalText := "",
     useVoice := false
 ) {
-    global TargetApp
+    global App_Opencode
 
     if (focusTargetApp) {
-        if (!FocusApp(TargetApp)) {
+        if (!FocusApp(App_Opencode)) {
             return
         }
         Sleep(200)

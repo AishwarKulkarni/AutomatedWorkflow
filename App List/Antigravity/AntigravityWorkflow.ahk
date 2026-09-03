@@ -22,10 +22,10 @@ PrepareAgyIDEChat(
     additionalText := "",
     useVoice := true
 ) {
-    global TargetApp
+    global App_Antigravity
 
     if (focusTargetApp) {
-        if (!FocusApp(TargetApp)) {
+        if (!FocusApp(App_Antigravity)) {
             return
         }
         Sleep(200)

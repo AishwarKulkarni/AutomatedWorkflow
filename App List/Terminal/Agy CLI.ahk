@@ -15,10 +15,10 @@ PrepareAgyChat(
     additionalText := "",
     useVoice := false
 ) {
-    global TargetApp
+    global App_Agy
 
     if (focusTargetApp) {
-        if (!FocusApp(TargetApp)) {
+        if (!FocusApp(App_Agy)) {
             return
         }
         Sleep(200)

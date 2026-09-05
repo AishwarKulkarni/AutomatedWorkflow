@@ -1,2 +1,8 @@
 .venv
 .env
+conversations
+.scratch
+__pycache__/
+*.pyc
+*.pyo
+*.pydsrc\__pycache__

@@ -33,13 +33,13 @@ SelectAppGui()
 #Include "comman\GenericVoice.ahk"
 
 #HotIf TargetApp == App_Antigravity
-#Include "App List\Antigravity\AntigravityWorkflow.ahk"
+#Include "app_list\Antigravity\AntigravityWorkflow.ahk"
 
 #HotIf TargetApp == App_Opencode
-#Include "App List\Terminal\Opencode CLI.ahk"
+#Include "app_list\Terminal\Opencode CLI.ahk"
 
 #HotIf TargetApp == App_Agy
-#Include "App List\Terminal\Agy CLI.ahk"
+#Include "app_list\Terminal\Agy CLI.ahk"
 
 ; Press Escape to instantly terminate the automation script
 Esc:: ExitApp()

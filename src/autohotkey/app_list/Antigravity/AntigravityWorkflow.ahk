@@ -78,7 +78,7 @@ PrepareAgyIDEChat(
     PrepareAgyIDEChat(
         true,       ; focusTargetApp
         true,       ; createNewChat
-        "^+l",      ; newChatShortcut
+        "^l",      ; newChatShortcut
         "/to-spec",
         "",
         false        ; useVoice

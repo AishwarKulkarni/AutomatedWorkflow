@@ -1,23 +1,16 @@
-import sys
 import os
-import json
 import html
-import requests
 import keyboard
 import datetime
-from dotenv import load_dotenv
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLineEdit, QTextBrowser, QLabel, QFrame, QGraphicsDropShadowEffect,
     QPushButton,
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QPropertyAnimation, QRect, QEasingCurve, QTimer
-from PyQt6.QtGui import QShortcut, QKeySequence, QColor
+from PyQt6.QtCore import Qt, QPropertyAnimation, QRect, QEasingCurve, QTimer
+from PyQt6.QtGui import QColor
 
-load_dotenv()
-API_KEY = os.getenv("OPENROUTER_API_KEY")
-MODEL = os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
-API_URL = "https://openrouter.ai/api/v1/chat/completions"
+from logic import ChatWorker, HotkeyThread, _steal_windows_focus
 
 # ---- Look & feel -----------------------------------------------------------
 BG = "#151517"
@@ -32,76 +25,6 @@ COLLAPSED_IDLE_WIDTH = 200
 COLLAPSED_ACTIVE_WIDTH = 220
 COLLAPSED_HEIGHT = 60
 EXPANDED_SIZE = (460, 520)
-
-
-def _steal_windows_focus(hwnd):
-    """On Windows, a background hotkey can't call SetForegroundWindow
-    directly — it silently no-ops. Tapping Alt first resets that lock so
-    the window actually takes keyboard focus instead of just flashing."""
-    if sys.platform != "win32":
-        return
-    try:
-        import ctypes
-        user32 = ctypes.windll.user32
-        user32.keybd_event(0x12, 0, 0, 0)      # Alt down
-        user32.SetForegroundWindow(hwnd)
-        user32.keybd_event(0x12, 0, 0x2, 0)    # Alt up
-    except Exception:
-        pass
-
-
-class ChatWorker(QThread):
-    """Streams a reply from OpenRouter, chunk by chunk."""
-    chunk = pyqtSignal(str)
-    finished_ok = pyqtSignal()
-    failed = pyqtSignal(str)
-
-    def __init__(self, history):
-        super().__init__()
-        self.history = history
-        self.is_cancelled = False
-
-    def run(self):
-        if not API_KEY:
-            if not self.is_cancelled:
-                self.failed.emit("No OPENROUTER_API_KEY set in .env")
-            return
-        headers = {"Authorization": f"Bearer {API_KEY}"}
-        payload = {"model": MODEL, "messages": self.history, "stream": True}
-        try:
-            with requests.post(API_URL, headers=headers, json=payload, stream=True, timeout=60) as r:
-                r.raise_for_status()
-                for line in r.iter_lines():
-                    if self.is_cancelled:
-                        break
-                    if not line:
-                        continue
-                    line = line.decode("utf-8")
-                    if not line.startswith("data: "):
-                        continue
-                    payload_str = line[6:]
-                    if payload_str == "[DONE]":
-                        break
-                    try:
-                        delta = json.loads(payload_str)["choices"][0]["delta"]
-                        if "content" in delta:
-                            if not self.is_cancelled:
-                                self.chunk.emit(delta["content"])
-                    except (json.JSONDecodeError, KeyError, IndexError):
-                        pass
-            if not self.is_cancelled:
-                self.finished_ok.emit()
-        except Exception as e:
-            if not self.is_cancelled:
-                self.failed.emit(str(e))
-
-
-class HotkeyThread(QThread):
-    toggle = pyqtSignal()
-
-    def run(self):
-        keyboard.add_hotkey("ctrl+space", self.toggle.emit)
-        keyboard.wait()
 
 
 class Notch(QMainWindow):
@@ -421,10 +344,3 @@ class Notch(QMainWindow):
                 border-radius: {radius}px;
             }}
         """)
-
-
-if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    notch = Notch()
-    notch.show()
-    sys.exit(app.exec())

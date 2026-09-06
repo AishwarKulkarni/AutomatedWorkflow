@@ -14,7 +14,7 @@ SelectAppGui() {
     myGui := Gui("+AlwaysOnTop", "Select Target App")
     myGui.Add("Text", , "Select or enter the target application:")
 
-    appList := [App_Antigravity, App_Opencode, App_Agy]
+    appList := [App_Antigravity, App_Opencode, App_Agy, App_Notepad]
     appInput := myGui.Add("ComboBox", "w250 Choose1", appList)
 
     BtnOK_Click(btn, info) {

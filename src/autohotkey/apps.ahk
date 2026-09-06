@@ -9,3 +9,4 @@
 Global App_Antigravity := "ahk_exe Antigravity IDE.exe"
 Global App_Opencode := "OpenCode ahk_exe WindowsTerminal.exe"
 Global App_Agy := "Agy ahk_exe WindowsTerminal.exe"
+Global App_Notepad := "ahk_exe Notepad.exe"

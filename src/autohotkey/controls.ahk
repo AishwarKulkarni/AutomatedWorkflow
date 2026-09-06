@@ -48,14 +48,16 @@ FocusApp(targetApp) {
         } else {
             if !WinWait(targetApp, , 10) {
                 ShowMessage("Error: Application did not start in time.")
-                SetTimer(ClearMessage, -3000)
+                Sleep(3000)
+                ClearMessage()
                 return false
             }
             WinActivate(targetApp)
         }
         if !WinWaitActive(targetApp, , 2) {
             ShowMessage("Error: Could not activate target application.")
-            SetTimer(ClearMessage, -3000)
+            Sleep(3000)
+            ClearMessage()
             return false
         }
     }

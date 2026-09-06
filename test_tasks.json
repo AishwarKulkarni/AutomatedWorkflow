@@ -1,0 +1,14 @@
+[
+  {
+    "action": "ShowMessage",
+    "args": ["Testing JSON Runner..."]
+  },
+  {
+    "action": "RunApp",
+    "args": ["ahk_exe Notepad.exe"]
+  },
+  {
+    "action": "TypeText",
+    "args": ["Hello from JSON Runner!\n"]
+  }
+]

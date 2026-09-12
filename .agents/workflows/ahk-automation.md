@@ -23,9 +23,11 @@ When invoked to create an automation script, follow these steps strictly in orde
 
 ### 3. App Registration Check
 
-- **Review**: Check `c:\Flutter Drive\Practice Mode\Responsive Related\workflow\apps.ahk` to see if the target application for the automation is already registered (e.g., `Global App_Name := "ahk_exe AppName.exe"`).
-- **Approval**: If the application is NOT listed, ask the user for approval to add it.
-- **Implementation**: Once approved, add the application to `c:\Flutter Drive\Practice Mode\Responsive Related\workflow\apps.ahk`.
+- **Review**: Check `c:\Flutter Drive\Practice Mode\Responsive Related\workflow\src\autohotkey\apps.ahk` to see if the target application is already registered.
+- **Approval**: If the application is NOT listed, ask the user for approval to add it, and ask for the **full path to the executable**.
+- **Implementation**: Once approved, add **both** entries to `apps.ahk`:
+  - `Global App_<Name> := "ahk_exe <Process.exe>"` — used by `FocusApp`/`WinExist` for window matching.
+  - `Global App_<Name>_Exec := "C:\Full\Path\To\app.exe"` — used by `RunApp` to launch the app from disk.
 
 ### 4. Create the Automation Script
 

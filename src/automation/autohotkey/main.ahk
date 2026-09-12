@@ -14,7 +14,7 @@ SelectAppGui() {
     myGui := Gui("+AlwaysOnTop", "Select Target App")
     myGui.Add("Text", , "Select or enter the target application:")
 
-    appList := [App_Antigravity, App_Opencode, App_Agy]
+    appList := [App_Antigravity, App_Opencode, App_Agy, App_Notepad]
     appInput := myGui.Add("ComboBox", "w250 Choose1", appList)
 
     BtnOK_Click(btn, info) {
@@ -29,17 +29,7 @@ SelectAppGui() {
 
 SelectAppGui()
 
-#Include "comman\AddPrompt.ahk"
-#Include "comman\GenericVoice.ahk"
-
-#HotIf TargetApp == App_Antigravity
-#Include "app_list\Antigravity\AntigravityWorkflow.ahk"
-
-#HotIf TargetApp == App_Opencode
-#Include "app_list\Terminal\Opencode CLI.ahk"
-
-#HotIf TargetApp == App_Agy
-#Include "app_list\Terminal\Agy CLI.ahk"
+#Include "hotkey_scripts\AddPrompt.ahk"
 
 ; Press Escape to instantly terminate the automation script
 Esc:: ExitApp()

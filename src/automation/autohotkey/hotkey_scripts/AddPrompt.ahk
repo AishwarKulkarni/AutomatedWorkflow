@@ -1,6 +1,7 @@
 #Requires AutoHotkey v2.0
 #Include "..\controls.ahk"
-#Include "..\comman\GenericVoice.ahk"
+
+global IsVoiceRecording := false
 
 ; Press ` to start, press ` again to stop and send.
 ToggleVoiceRecording(FocusCallback?) {
@@ -12,12 +13,19 @@ ToggleVoiceRecording(FocusCallback?) {
         }
 
         ; 2. Start dictation
-        StartVoiceRecording("Voice Chat Active... Press `` to send.")
+        IsVoiceRecording := true
+        ToggleVoiceTyping()
+        ShowMessage("Voice Chat Active... Press `` to send.")
     } else {
         ; 3. Stop dictation
-        StopVoiceRecording()
+        IsVoiceRecording := false
+        ToggleVoiceTyping()
+        ClearMessage()
+        Sleep(500) ; wait slightly for text to be committed
 
         ; 4. Press Enter to send the message in Antigravity
-        SendEnter()
+        SendShortcut("{Enter}")
     }
 }
+
+`:: ToggleVoiceRecording()

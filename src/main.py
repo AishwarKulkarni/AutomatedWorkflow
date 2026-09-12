@@ -1,7 +1,7 @@
 import sys
 from dotenv import load_dotenv
 from PyQt6.QtWidgets import QApplication
-from ui import Notch
+from ui.ui import Notch
 
 def main():
     load_dotenv()

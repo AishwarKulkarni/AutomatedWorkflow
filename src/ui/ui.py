@@ -2,16 +2,17 @@ import os
 import html
 import keyboard
 import datetime
+import json
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLineEdit, QTextBrowser, QLabel, QFrame, QGraphicsDropShadowEffect,
     QPushButton,
 )
-from PyQt6.QtCore import Qt, QPropertyAnimation, QRect, QEasingCurve, QTimer
+from PyQt6.QtCore import Qt, QPropertyAnimation, QRect, QEasingCurve, QTimer, QEvent
 from PyQt6.QtGui import QColor
-
-from logic import ChatWorker, HotkeyThread, _steal_windows_focus
-
+from agent.agent import AgentManager
+from automation.action_controller import ActionController
+from utils.utils import HotkeyThread, _steal_windows_focus
 # ---- Look & feel -----------------------------------------------------------
 BG = "#151517"
 BORDER = "#2A2A2D"
@@ -20,7 +21,6 @@ MUTED = "#7A7A7D"
 ACCENT = "#00FF7F"
 ERROR_COLOR = "#FF453A"
 FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif"
-
 COLLAPSED_IDLE_WIDTH = 200
 COLLAPSED_ACTIVE_WIDTH = 220
 COLLAPSED_HEIGHT = 60
@@ -31,14 +31,29 @@ class Notch(QMainWindow):
     def __init__(self):
         super().__init__()
         self.expanded = False
-        self.history = []
-        self.worker = None
+        
+        self.action_controller = ActionController()
+        self.action_controller.start()
+        
+        self.agent = AgentManager(self.action_controller)
+        self.agent.chunk.connect(self._on_chunk)
+        self.agent.history_updated.connect(self._on_history_updated)
+        self.agent.finished_ok.connect(self._on_done)
+        self.agent.failed.connect(self._on_error)
+        
         self._build_ui()
         self._update_collapsed_state(animated=False)
 
         self.hotkeys = HotkeyThread()
         self.hotkeys.toggle.connect(self.toggle)
         self.hotkeys.start()
+
+        QApplication.instance().applicationStateChanged.connect(self._on_app_state_changed)
+
+    def _on_app_state_changed(self, state):
+        if state != Qt.ApplicationState.ApplicationActive:
+            if self.expanded:
+                self.collapse()
 
     # ---- UI ------------------------------------------------------------
     def _build_ui(self):
@@ -55,9 +70,9 @@ class Notch(QMainWindow):
         self._update_panel_style(max(2, (COLLAPSED_HEIGHT - 28) // 2))
 
         shadow = QGraphicsDropShadowEffect(self.panel)
-        shadow.setBlurRadius(30)
-        shadow.setOffset(0, 8)
-        shadow.setColor(QColor(0, 0, 0, 180))
+        shadow.setBlurRadius(20)
+        shadow.setOffset(0, 4)
+        shadow.setColor(QColor(0, 0, 0, 120))
         self.panel.setGraphicsEffect(shadow)
         outer_layout.addWidget(self.panel)
 
@@ -125,11 +140,12 @@ class Notch(QMainWindow):
                 background: none; 
             }}
         """)
+        self.chat.setOpenLinks(False)
         self.chat.hide()
         layout.addWidget(self.chat)
 
         self.input = QLineEdit()
-        self.input.setPlaceholderText("Ask me anything…")
+        self.input.setPlaceholderText("Ask me anything...")
         self.input.setFixedHeight(44)
         self.input.setStyleSheet(f"""
             QLineEdit {{
@@ -155,7 +171,7 @@ class Notch(QMainWindow):
 
     def _place(self, w, h):
         screen = QApplication.primaryScreen().geometry()
-        self.setGeometry((screen.width() - w) // 2, 10, w, h)
+        self.setGeometry((screen.width() - w) // 2, 4, w, h)
 
     # ---- expand / collapse ----------------------------------------------
     def toggle(self):
@@ -171,7 +187,7 @@ class Notch(QMainWindow):
         self.input.show()
         self.new_chat_btn.show()
         self._set_active(True)
-        self._render()  # Ensure chat is rendered and scrolled correctly after showing
+        self._render()
         self._animate(*EXPANDED_SIZE)
         self._grab_focus()
 
@@ -196,7 +212,6 @@ class Notch(QMainWindow):
             self.title.hide()
             w = COLLAPSED_IDLE_WIDTH
 
-        # Prevent continuous animation if already at the target size
         current = self.geometry()
         if current.width() == w and current.height() == COLLAPSED_HEIGHT:
             return
@@ -208,7 +223,7 @@ class Notch(QMainWindow):
 
     def _animate(self, w, h):
         screen = QApplication.primaryScreen().geometry()
-        target = QRect((screen.width() - w) // 2, 10, w, h)
+        target = QRect((screen.width() - w) // 2, 4, w, h)
         self.anim = QPropertyAnimation(self, b"geometry")
         self.anim.setDuration(300)
         self.anim.setStartValue(self.geometry())
@@ -231,30 +246,34 @@ class Notch(QMainWindow):
 
     # ---- chat -------------------------------------------------------------
     def start_new_chat(self):
-        if self.worker is not None:
-            self.worker.is_cancelled = True
-            self.worker = None
-
+        self.agent.is_cancelled = True
         self.save_conversation()
-        self.history.clear()
+        self.agent.clear_history()
         self.chat.clear()
         self.title.setText("")
         self._update_collapsed_state()
         self.input.setDisabled(False)
-        self.input.setPlaceholderText("Ask me anything…")
+        self.input.setPlaceholderText("Ask me anything...")
 
     def save_conversation(self):
-        if not self.history:
+        if not self.agent.history:
             return
         os.makedirs("conversations", exist_ok=True)
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         filepath = os.path.join("conversations", f"chat_{timestamp}.md")
         with open(filepath, "w", encoding="utf-8") as f:
-            for msg in self.history:
+            for msg in self.agent.history:
                 role = "YOU" if msg["role"] == "user" else "NOTCH"
-                # Strip HTML tags out if there are any, though we store raw markdown basically.
-                # The history has HTML from errors, but let's just write raw.
-                f.write(f"### {role}\n{msg['content']}\n\n")
+                f.write(f"### {role}\n")
+                
+                if msg.get("tool_calls"):
+                    for tc in msg["tool_calls"]:
+                        fn = tc.get("function", {})
+                        f.write(f"**Tool Call:** {fn.get('name')}\n`json\n{fn.get('arguments')}\n`\n")
+                
+                if msg.get("content"):
+                    f.write(f"{msg['content']}\n")
+                f.write("\n")
 
     def send(self):
         text = self.input.text().strip()
@@ -262,54 +281,69 @@ class Notch(QMainWindow):
             return
         self.input.clear()
         self.input.setDisabled(True)
-        self.input.setPlaceholderText("Thinking…")
-        self.title.setText("Thinking…")
+        self.input.setPlaceholderText("Thinking...")
+        self.title.setText("Thinking...")
         self._update_collapsed_state()
 
-        self.history.append({"role": "user", "content": text})
-        self.history.append({"role": "assistant", "content": ""})
-        self._render()
-
-        if self.worker is not None:
-            self.worker.is_cancelled = True
-
-        self.worker = ChatWorker(self.history[:-1])
-        self.worker.chunk.connect(self._on_chunk)
-        self.worker.finished_ok.connect(self._on_done)
-        self.worker.failed.connect(self._on_error)
-        self.worker.start()
+        self.agent.add_user_message(text)
+        
+        self.agent.is_cancelled = False
+        self.agent.start()
 
     def _on_chunk(self, chunk):
-        if not self.history:
-            return
-        self.title.setText("Typing…")
+        self.title.setText("Typing...")
         self._update_collapsed_state()
-        self.history[-1]["content"] += chunk
+        self._render()
+
+    def _on_history_updated(self, history):
         self._render()
 
     def _on_done(self):
         self.input.setDisabled(False)
-        self.input.setPlaceholderText("Ask me anything…")
+        self.input.setPlaceholderText("Ask me anything...")
         self.title.setText("")
         self._update_collapsed_state()
         self.input.setFocus()
 
     def _on_error(self, msg):
-        if not self.history:
-            return
-        self.history[-1]["content"] = f"<span style='color:{ERROR_COLOR};'>{html.escape(msg)}</span>"
-        self._render()
+        print(f"AGENT ERROR: {msg}")
         self._on_done()
 
     def _render(self):
         blocks = []
-        for msg in self.history:
+        for msg in self.agent.history:
             if msg["role"] not in ("user", "assistant"):
                 continue
-
             is_user = msg["role"] == "user"
-            body = msg["content"] if not is_user and "<span" in msg["content"] \
-                else html.escape(msg["content"]).replace("\n", "<br>")
+            content_str = msg.get("content") or ""
+            body = (content_str if not is_user and "<span" in content_str
+                    else html.escape(content_str).replace("\n", "<br>"))
+            if msg.get("tool_calls"):
+                html_lines = []
+                if body:
+                    html_lines.append(body)
+                for c in msg.get("tool_calls", []):
+                    fn_name = c.get("function", {}).get("name", "")
+                    try:
+                        args_str = c.get("function", {}).get("arguments", "{}")
+                        c_args = json.loads(args_str)
+                    except Exception:
+                        c_args = {}
+
+                    if fn_name == "execute_action":
+                        action_name = c_args.get("action_name", "?")
+                        action_args = c_args.get("args", [])
+                        target = c_args.get("target_app", "")
+                        target_str = f" ? <i>{html.escape(target)}</i>" if target else ""
+                        args_display = html.escape(", ".join(str(a) for a in action_args)) if action_args else "<i>no args</i>"
+                        html_lines.append(
+                            f"<br><i>Executing:</i> <b>{html.escape(action_name)}</b>"
+                            f"({args_display}){target_str}"
+                        )
+                    else:
+                        html_lines.append(f"<br><i>Unknown tool:</i> <b>{html.escape(fn_name)}</b>")
+
+                body = "<br>".join(html_lines)
 
             if is_user:
                 blocks.append(
@@ -332,6 +366,7 @@ class Notch(QMainWindow):
 
     def closeEvent(self, event):
         self.save_conversation()
+        self.action_controller.stop()
         keyboard.unhook_all()
         super().closeEvent(event)
         os._exit(0)
@@ -344,3 +379,4 @@ class Notch(QMainWindow):
                 border-radius: {radius}px;
             }}
         """)
+

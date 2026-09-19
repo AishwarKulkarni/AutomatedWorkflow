@@ -19,7 +19,27 @@ def _steal_windows_focus(hwnd):
 
 class HotkeyThread(QThread):
     toggle = pyqtSignal()
+    ptt_start = pyqtSignal()
+    ptt_stop = pyqtSignal()
 
     def run(self):
+        # Toggle UI using ctrl+space
         keyboard.add_hotkey("ctrl+space", self.toggle.emit)
+        
+        # PTT using backtick key (`)
+        self.ptt_active = False
+        
+        def on_press(e):
+            if not self.ptt_active:
+                self.ptt_active = True
+                self.ptt_start.emit()
+                
+        def on_release(e):
+            if self.ptt_active:
+                self.ptt_active = False
+                self.ptt_stop.emit()
+                
+        keyboard.on_press_key("`", on_press)
+        keyboard.on_release_key("`", on_release)
+        
         keyboard.wait()

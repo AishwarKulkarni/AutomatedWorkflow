@@ -3,16 +3,18 @@ import html
 import keyboard
 import datetime
 import json
+import math
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLineEdit, QTextBrowser, QLabel, QFrame, QGraphicsDropShadowEffect,
     QPushButton,
 )
-from PyQt6.QtCore import Qt, QPropertyAnimation, QRect, QEasingCurve, QTimer, QEvent
-from PyQt6.QtGui import QColor
+from PyQt6.QtCore import Qt, QPropertyAnimation, QRect, QRectF, QEasingCurve, QTimer, QEvent
+from PyQt6.QtGui import QColor, QMouseEvent, QPainter
 from agent.agent import AgentManager
 from automation.action_controller import ActionController
 from utils.utils import HotkeyThread, _steal_windows_focus
+from voice.transcriber import VoiceTranscriber
 # ---- Look & feel -----------------------------------------------------------
 BG = "#151517"
 BORDER = "#2A2A2D"
@@ -21,10 +23,81 @@ MUTED = "#7A7A7D"
 ACCENT = "#00FF7F"
 ERROR_COLOR = "#FF453A"
 FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif"
-COLLAPSED_IDLE_WIDTH = 200
-COLLAPSED_ACTIVE_WIDTH = 220
+COLLAPSED_IDLE_WIDTH = 180
+COLLAPSED_ACTIVE_WIDTH = 200
 COLLAPSED_HEIGHT = 60
 EXPANDED_SIZE = (460, 520)
+
+
+class WaveWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(50, 20)
+        self.phase = 0.0
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update_wave)
+        
+    def start(self):
+        self.phase = 0.0
+        self.timer.start(16) # ~60 FPS for fluid Apple-like animation
+        self.show()
+        
+    def stop(self):
+        self.timer.stop()
+        self.hide()
+        
+    def update_wave(self):
+        self.phase += 0.08
+        self.update()
+        
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setPen(Qt.PenStyle.NoPen)
+        
+        num_bars = 5
+        bar_width = 4.0
+        spacing = 2.0
+        total_width = num_bars * bar_width + (num_bars - 1) * spacing
+        start_x = (self.width() - total_width) / 2.0
+        
+        accent = QColor(ACCENT)
+        
+        for i in range(num_bars):
+            t = self.phase
+            # Different phases and speeds for each bar for organic liquid motion
+            p = i * 0.8
+            
+            v1 = math.sin(t * 1.5 + p)
+            v2 = math.sin(t * 0.7 - p * 1.2)
+            v3 = math.sin(t * 2.2 + p * 0.5)
+            
+            val = (v1 + v2 + v3) / 3.0 
+            val = (val + 1.0) / 2.0 # Normalize to 0-1
+            val = math.pow(val, 1.2) # Snappy ease
+            
+            # Envelope to ensure center bars are taller (Dynamic Island style)
+            dist = abs(i - (num_bars - 1) / 2.0)
+            max_h = 16.0 - (dist * 3.5)
+            min_h = 4.0
+            
+            h = min_h + val * (max_h - min_h)
+            y = (self.height() - h) / 2.0
+            x = start_x + i * (bar_width + spacing)
+            
+            opacity = int(140 + (val * 115))
+            
+            # Subtle glow for premium feel
+            glow = QColor(accent)
+            glow.setAlpha(int(opacity * 0.3))
+            painter.setBrush(glow)
+            painter.drawRoundedRect(QRectF(x - 1, y - 1, bar_width + 2, h + 2), (bar_width + 2) / 2.0, (bar_width + 2) / 2.0)
+            
+            # Core bar
+            core = QColor(accent)
+            core.setAlpha(opacity)
+            painter.setBrush(core)
+            painter.drawRoundedRect(QRectF(x, y, bar_width, h), bar_width / 2.0, bar_width / 2.0)
 
 
 class Notch(QMainWindow):
@@ -41,11 +114,17 @@ class Notch(QMainWindow):
         self.agent.finished_ok.connect(self._on_done)
         self.agent.failed.connect(self._on_error)
         
+        self.voice = VoiceTranscriber()
+        self.voice.transcription_ready.connect(self._on_transcription_ready)
+        self.voice.status_changed.connect(self._on_voice_status)
+        
         self._build_ui()
         self._update_collapsed_state(animated=False)
 
         self.hotkeys = HotkeyThread()
         self.hotkeys.toggle.connect(self.toggle)
+        self.hotkeys.ptt_start.connect(self.voice.start_recording)
+        self.hotkeys.ptt_stop.connect(self.voice.stop_recording)
         self.hotkeys.start()
 
         QApplication.instance().applicationStateChanged.connect(self._on_app_state_changed)
@@ -82,10 +161,12 @@ class Notch(QMainWindow):
 
         header = QHBoxLayout()
         header.setContentsMargins(4, 0, 4, 0)
-        self.dot = QLabel()
-        self.dot.setFixedSize(10, 10)
-
-        header.addWidget(self.dot)
+        
+        self.notch_label = QLabel("NotchAI")
+        self.notch_label.setStyleSheet(f"QLabel {{ color: {TEXT}; font: 800 12px {FONT}; letter-spacing: 1px; background-color: transparent; border: none; outline: none; }}")
+        self.notch_label.hide()
+        header.addWidget(self.notch_label)
+        
         header.addStretch()
 
         self.title = QLabel("")
@@ -93,6 +174,10 @@ class Notch(QMainWindow):
         self.title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.title.hide()
         header.addWidget(self.title)
+
+        self.wave_widget = WaveWidget()
+        self.wave_widget.hide()
+        header.addWidget(self.wave_widget)
 
         header.addStretch()
         
@@ -108,7 +193,6 @@ class Notch(QMainWindow):
         header.addSpacing(4)
 
         layout.addLayout(header)
-        self._set_active(False)
 
         self.chat = QTextBrowser()
         self.chat.setStyleSheet(f"""
@@ -162,12 +246,34 @@ class Notch(QMainWindow):
             }}
         """)
         self.input.returnPressed.connect(self.send)
+        
+        self.ptt_btn = QPushButton("🎙")
+        self.ptt_btn.setFixedSize(44, 44)
+        self.ptt_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.ptt_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #1A1A1C;
+                color: {TEXT};
+                border-radius: 22px;
+                border: 1px solid {BORDER};
+                font-size: 18px;
+            }}
+            QPushButton:hover {{ background-color: #252528; }}
+            QPushButton:pressed {{ background-color: {ACCENT}; color: #000; }}
+        """)
+        self.ptt_btn.mousePressEvent = self._on_ptt_press
+        self.ptt_btn.mouseReleaseEvent = self._on_ptt_release
+        
         self.input.hide()
-        layout.addWidget(self.input)
-
-    def _set_active(self, active):
-        color = ACCENT if active else MUTED
-        self.dot.setStyleSheet(f"background-color: {color}; border-radius: 5px;")
+        self.ptt_btn.hide()
+        
+        input_layout = QHBoxLayout()
+        input_layout.setContentsMargins(0, 0, 0, 0)
+        input_layout.setSpacing(8)
+        input_layout.addWidget(self.input)
+        input_layout.addWidget(self.ptt_btn)
+        
+        layout.addLayout(input_layout)
 
     def _place(self, w, h):
         screen = QApplication.primaryScreen().geometry()
@@ -185,8 +291,9 @@ class Notch(QMainWindow):
         self.panel.layout().setContentsMargins(16, 12, 16, 16)
         self.chat.show()
         self.input.show()
+        self.ptt_btn.show()
         self.new_chat_btn.show()
-        self._set_active(True)
+        self.notch_label.show()
         self._render()
         self._animate(*EXPANDED_SIZE)
         self._grab_focus()
@@ -197,20 +304,26 @@ class Notch(QMainWindow):
         self.panel.layout().setContentsMargins(16, 3, 16, 3)
         self.chat.hide()
         self.input.hide()
-        self.new_chat_btn.hide()
-        self._set_active(False)
+        self.ptt_btn.hide()
+        self.notch_label.hide()
+        self.new_chat_btn.show() if self.title.text() else self.new_chat_btn.hide()
         self._update_collapsed_state()
 
     def _update_collapsed_state(self, animated=True):
         if self.expanded:
             return
 
+        is_active = False
         if self.title.text():
             self.title.show()
-            w = COLLAPSED_ACTIVE_WIDTH
+            is_active = True
         else:
             self.title.hide()
-            w = COLLAPSED_IDLE_WIDTH
+            
+        if hasattr(self, 'wave_widget') and self.wave_widget.isVisible():
+            is_active = True
+            
+        w = COLLAPSED_ACTIVE_WIDTH if is_active else COLLAPSED_IDLE_WIDTH
 
         current = self.geometry()
         if current.width() == w and current.height() == COLLAPSED_HEIGHT:
@@ -243,6 +356,25 @@ class Notch(QMainWindow):
             self.close()
         else:
             super().keyPressEvent(event)
+
+    def _on_ptt_press(self, event: QMouseEvent):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.voice.start_recording()
+            
+    def _on_ptt_release(self, event: QMouseEvent):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.voice.stop_recording()
+
+    def _on_transcription_ready(self, text):
+        self.input.setText(text)
+        self.send()
+        
+    def _on_voice_status(self, status):
+        if status == "Recording...":
+            self.wave_widget.start()
+        else:
+            self.wave_widget.stop()
+        self._update_collapsed_state()
 
     # ---- chat -------------------------------------------------------------
     def start_new_chat(self):
@@ -281,8 +413,8 @@ class Notch(QMainWindow):
             return
         self.input.clear()
         self.input.setDisabled(True)
-        self.input.setPlaceholderText("Thinking...")
-        self.title.setText("Thinking...")
+        self.input.setPlaceholderText("Thinking")
+        self.title.setText("Thinking")
         self._update_collapsed_state()
 
         self.agent.add_user_message(text)
@@ -291,8 +423,6 @@ class Notch(QMainWindow):
         self.agent.start()
 
     def _on_chunk(self, chunk):
-        self.title.setText("Typing...")
-        self._update_collapsed_state()
         self._render()
 
     def _on_history_updated(self, history):
@@ -300,7 +430,7 @@ class Notch(QMainWindow):
 
     def _on_done(self):
         self.input.setDisabled(False)
-        self.input.setPlaceholderText("Ask me anything...")
+        self.input.setPlaceholderText("Ask me anything..")
         self.title.setText("")
         self._update_collapsed_state()
         self.input.setFocus()
@@ -330,18 +460,27 @@ class Notch(QMainWindow):
                     except Exception:
                         c_args = {}
 
-                    if fn_name == "execute_action":
-                        action_name = c_args.get("action_name", "?")
-                        action_args = c_args.get("args", [])
-                        target = c_args.get("target_app", "")
-                        target_str = f" ? <i>{html.escape(target)}</i>" if target else ""
-                        args_display = html.escape(", ".join(str(a) for a in action_args)) if action_args else "<i>no args</i>"
+                    if fn_name == "execute_actions":
+                        actions = c_args.get("actions", [])
+                        for action in actions:
+                            action_name = action.get("action_name", "?")
+                            action_args = action.get("args", [])
+                            target = action.get("target_app", "")
+                            target_str = f" → <i>{html.escape(target)}</i>" if target else ""
+                            args_display = html.escape(", ".join(str(a) for a in action_args)) if action_args else "<i>no args</i>"
+                            html_lines.append(
+                                f"<br><i>Executing:</i> <b>{html.escape(action_name)}</b>"
+                                f"({args_display}){target_str}"
+                            )
+                    elif fn_name == "web_search":
+                        query = c_args.get("query", "")
                         html_lines.append(
-                            f"<br><i>Executing:</i> <b>{html.escape(action_name)}</b>"
-                            f"({args_display}){target_str}"
+                            f'<br><span style="color: {MUTED}; font-size: 12px;">'
+                            f'🔍 Searched: &ldquo;{html.escape(query)}&rdquo;</span>'
                         )
                     else:
                         html_lines.append(f"<br><i>Unknown tool:</i> <b>{html.escape(fn_name)}</b>")
+
 
                 body = "<br>".join(html_lines)
 

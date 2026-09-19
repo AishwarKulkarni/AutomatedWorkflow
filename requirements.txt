@@ -3,3 +3,9 @@ requests
 python-dotenv
 keyboard
 pytest
+duckduckgo-search
+ddgs
+faster-whisper
+sounddevice
+numpy
+scipy

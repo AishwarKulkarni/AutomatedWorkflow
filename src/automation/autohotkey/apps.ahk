@@ -14,3 +14,7 @@ Global App_Notepad_Exec := "C:\Windows\System32\notepad.exe"
 ; CMD-based launchers — _Exec points to the actual launcher, not cmd.exe
 Global App_Terminal := "ahk_exe WindowsTerminal.exe"
 Global App_Terminal_Exec := "wt.exe"
+
+Global App_Brave := "ahk_exe brave.exe"
+Global App_Brave_Exec := "C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"
+

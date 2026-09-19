@@ -1,50 +1,64 @@
 ---
-description: Automates the creation of AutoHotkey (AHK) scripts for application automation flows, managing reusable functions and app registrations.
+description: Guide for onboarding a new application to the Notch desktop automation assistant so that the LLM can control it.
 ---
 
-# AHK Automation Skill
+# AHK Automation Skill - App Onboarding
 
-You are an expert AutoHotkey (AHK) v2 developer. Use this skill when the user asks you to create an automation flow for an application.
+You are an expert AutoHotkey (AHK) v2 developer and AI automation engineer. Use this skill when the user asks you to add support for a new application to the Notch automation assistant.
+
+## Architecture Context
+
+Notch relies on three key locations to understand and control a new application:
+1. **The Python/AHK Manifest (`ahk_manifest.md`)**: Informs the LLM of the app's variable name and description via the system prompt.
+2. **The Apps Script (`apps.ahk`)**: Defines the actual AHK `WinTitle` string and executable path.
+3. **The Local Knowledge Base (`apps/<Name>.md`)**: Provides the LLM with specific shortcuts and workflows for that application.
 
 ## Workflow
 
-When invoked to create an automation script, follow these steps strictly in order:
+When asked to onboard a new app for automation, follow these steps strictly:
 
-### 1. Analyze Existing Functions
+### 1. Identify Target App Information
+- Ask the user for the following details (if not already provided):
+  - **App Name** (e.g., `Spotify`)
+  - **Description** (e.g., `Music streaming player`)
+  - **Process Name** (e.g., `Spotify.exe`)
+  - **Full Path to Executable** (e.g., `C:\Users\Username\AppData\Roaming\Spotify\Spotify.exe`)
+- Wait for user approval and details before proceeding.
 
-- **Review**: Analyze the `c:\Flutter Drive\Practice Mode\Responsive Related\workflow\controls.ahk` file.
-- **Identify**: Look for existing reusable functions (e.g., `ClickAt`, `FocusApp`, `SendEnter`, `TypeText`) that can be used to fulfill the user's requested automation flow.
+### 2. Update the AHK Manifest
+- **File**: `c:\Flutter Drive\Practice Mode\Responsive Related\workflow\.agents\context\ahk_manifest.md`
+- **Action**: Add a new row to the `## Apps` markdown table.
+- **Format**: `| App_<Name> | <Description> |`
 
-### 2. Handle New Function Requirements
+### 3. Update the Apps Script
+- **File**: `c:\Flutter Drive\Practice Mode\Responsive Related\workflow\src\automation\autohotkey\apps.ahk`
+- **Action**: Add the global variable definitions for the new app.
+- **Format**:
+  ```ahk
+  Global App_<Name> := "ahk_exe <Process.exe>"
+  Global App_<Name>_Exec := "C:\Full\Path\To\app.exe"
+  ```
+  *(Make sure to use the exact variable name as defined in the manifest.)*
 
-- **Assess**: Determine if the requested flow requires a new reusable function that is not currently in `controls.ahk`.
-- **Approval**: If a new function is needed, you **MUST** ask the user for approval first before adding it. Do not proceed until the user approves.
-- **Implementation**: Once approval is granted, add the new reusable function to `c:\Flutter Drive\Practice Mode\Responsive Related\workflow\controls.ahk`.
+### 4. Create App Instruction File for the LLM
+- **File**: `c:\Flutter Drive\Practice Mode\Responsive Related\workflow\.agents\context\apps\<Name>.md`
+  - *Important*: The filename must exactly match the `<Name>` part of `App_<Name>` (no `App_` prefix).
+- **Action**: Create a new markdown file that teaches the LLM how to navigate and use this app.
+- **Format Requirement**: Must contain YAML frontmatter, a `# [<AppName>] Automation Guide` heading, and a Markdown table for shortcuts.
+  ```markdown
+  ---
+  title: <App Name> Automation Guide
+  ---
 
-### 3. App Registration Check
+  # <App Name> Automation Guide
 
-- **Review**: Check `c:\Flutter Drive\Practice Mode\Responsive Related\workflow\src\autohotkey\apps.ahk` to see if the target application is already registered.
-- **Approval**: If the application is NOT listed, ask the user for approval to add it, and ask for the **full path to the executable**.
-- **Implementation**: Once approved, add **both** entries to `apps.ahk`:
-  - `Global App_<Name> := "ahk_exe <Process.exe>"` — used by `FocusApp`/`WinExist` for window matching.
-  - `Global App_<Name>_Exec := "C:\Full\Path\To\app.exe"` — used by `RunApp` to launch the app from disk.
+  | Shortcut | Description |
+  | --- | --- |
+  | `^n` | New item (example) |
+  | `!f` | Open file menu (example) |
+  ```
+- *Note:* If you are unaware of the specific shortcuts for the app, provide a basic/empty table structure and inform the user that the Notch agent can dynamically update this file when it learns new shortcuts.
 
-### 4. Create the Automation Script
-
-- **Write**: Create the specific AHK script for the application's automation flow.
-- **Location**: Save the new script in the appropriate subdirectory under `c:\Flutter Drive\Practice Mode\Responsive Related\workflow\App List\<AppName>\`.
-- **Guidelines**:
-  - Rely on the reusable functions from `controls.ahk`.
-  - Follow the user's specific instructions for the automation flow.
-  - **CRITICAL**: Do NOT add comments to the code unless they are extremely important (per the user's global rule).
-
-### 5. Register in Main Script
-
-- **Review**: Open `c:\Flutter Drive\Practice Mode\Responsive Related\workflow\main.ahk`.
-- **Update Includes**: Include the new script in `main.ahk` under the appropriate `#HotIf TargetApp != "" and WinActive(TargetApp)` block. If this is a new app, you may need to add `#Include "App List\<AppName>\<ScriptName>.ahk"`.
-- **Update GUI Dropdown**: Ensure the new application variable (e.g., `App_Name`) is added to the `appList` array inside the `SelectAppGui()` function in `main.ahk` so it can be selected from the UI dropdown menu.
-
-## Golden Rules
-
-- **No Unapproved Additions**: Never add to `controls.ahk` or `apps.ahk` without explicit user permission.
-- **Code Cleanliness**: No unnecessary comments. Keep the code minimal and functional.
+### 5. Verification
+- Confirm with the user that the manifest, the `apps.ahk` script, and the app instruction file are all correctly populated.
+- Remind the user to restart the Notch application, as the Python backend reads the manifest and `apps.ahk` variables upon startup to build the system prompt for the LLM.

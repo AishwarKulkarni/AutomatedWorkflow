@@ -3,28 +3,32 @@
 ; Clicks at a specific coordinate and waits briefly
 ClickAt(x, y) {
     Click(x, y)
-    Sleep(100)
+    Sleep(500)
 }
 
 ; Toggles Windows Voice Typing (Win + H)
 ToggleVoiceTyping() {
     Send("#h")
+    Sleep(500)
 }
 
 ; Sends a keyboard shortcut
 SendShortcut(shortcut) {
     Send(shortcut)
+    Sleep(500)
 }
 
 ; Shows a tooltip message
 ShowMessage(msg) {
     CoordMode("ToolTip", "Screen")
     ToolTip(msg, 0, A_ScreenHeight)
+    Sleep(500)
 }
 
 ; Clears the tooltip
 ClearMessage() {
     ToolTip()
+    Sleep(500)
 }
 
 
@@ -35,12 +39,13 @@ CopyToClipboard(data) {
     A_Clipboard := ""
     A_Clipboard := data
     ClipWait(2)
+    Sleep(500)
 }
 
 ; Pastes the current clipboard content
 Paste() {
     Send("^v")
-    Sleep(200)
+    Sleep(500)
 }
 
 ; Brings the target application to the foreground, launching it if necessary
@@ -80,6 +85,7 @@ FocusApp() {
             return false
         }
     }
+    Sleep(500)
     return true
 }
 
@@ -96,7 +102,7 @@ ClearTextField() {
     }
 
     A_Clipboard := oldClip
-    Sleep(200)
+    Sleep(500)
 }
 
 ReadFileContent(filePath) {
@@ -106,7 +112,20 @@ ReadFileContent(filePath) {
     return FileRead(filePath)
 }
 
+WriteFileContent(filePath, content) {
+    SplitPath(filePath, , &dir)
+    if (dir != "" && !DirExist(dir)) {
+        DirCreate(dir)
+    }
+    if FileExist(filePath) {
+        FileDelete(filePath)
+    }
+    FileAppend(content, filePath, "UTF-8")
+    return true
+}
+
 ; Types literal text
 TypeText(text) {
     SendText(text)
+    Sleep(500)
 }

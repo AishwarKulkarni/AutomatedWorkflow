@@ -15,6 +15,7 @@ from agent.agent import AgentManager
 from automation.action_controller import ActionController
 from utils.utils import HotkeyThread, _steal_windows_focus
 from voice.transcriber import VoiceTranscriber
+from voice.synthesizer import VoiceSynthesizer
 # ---- Look & feel -----------------------------------------------------------
 BG = "#151517"
 BORDER = "#2A2A2D"
@@ -24,7 +25,7 @@ ACCENT = "#00FF7F"
 ERROR_COLOR = "#FF453A"
 FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif"
 COLLAPSED_IDLE_WIDTH = 180
-COLLAPSED_ACTIVE_WIDTH = 200
+COLLAPSED_ACTIVE_WIDTH = 195
 COLLAPSED_HEIGHT = 60
 EXPANDED_SIZE = (460, 520)
 
@@ -32,7 +33,7 @@ EXPANDED_SIZE = (460, 520)
 class WaveWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedSize(50, 20)
+        self.setFixedSize(70, 20)
         self.phase = 0.0
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_wave)
@@ -56,8 +57,8 @@ class WaveWidget(QWidget):
         painter.setPen(Qt.PenStyle.NoPen)
         
         num_bars = 5
-        bar_width = 4.0
-        spacing = 2.0
+        bar_width = 6.0
+        spacing = 3.0
         total_width = num_bars * bar_width + (num_bars - 1) * spacing
         start_x = (self.width() - total_width) / 2.0
         
@@ -118,13 +119,14 @@ class Notch(QMainWindow):
         self.voice.transcription_ready.connect(self._on_transcription_ready)
         self.voice.status_changed.connect(self._on_voice_status)
         
+        self.synthesizer = VoiceSynthesizer(voice="en-GB-RyanNeural")
+        
         self._build_ui()
         self._update_collapsed_state(animated=False)
 
         self.hotkeys = HotkeyThread()
         self.hotkeys.toggle.connect(self.toggle)
-        self.hotkeys.ptt_start.connect(self.voice.start_recording)
-        self.hotkeys.ptt_stop.connect(self.voice.stop_recording)
+        self.hotkeys.toggle_recording.connect(self._toggle_recording)
         self.hotkeys.start()
 
         QApplication.instance().applicationStateChanged.connect(self._on_app_state_changed)
@@ -250,19 +252,9 @@ class Notch(QMainWindow):
         self.ptt_btn = QPushButton("🎙")
         self.ptt_btn.setFixedSize(44, 44)
         self.ptt_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.ptt_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: #1A1A1C;
-                color: {TEXT};
-                border-radius: 22px;
-                border: 1px solid {BORDER};
-                font-size: 18px;
-            }}
-            QPushButton:hover {{ background-color: #252528; }}
-            QPushButton:pressed {{ background-color: {ACCENT}; color: #000; }}
-        """)
-        self.ptt_btn.mousePressEvent = self._on_ptt_press
-        self.ptt_btn.mouseReleaseEvent = self._on_ptt_release
+        self.ptt_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self._update_ptt_btn_style(False)
+        self.ptt_btn.clicked.connect(self._toggle_recording)
         
         self.input.hide()
         self.ptt_btn.hide()
@@ -306,7 +298,7 @@ class Notch(QMainWindow):
         self.input.hide()
         self.ptt_btn.hide()
         self.notch_label.hide()
-        self.new_chat_btn.show() if self.title.text() else self.new_chat_btn.hide()
+        self.new_chat_btn.hide()
         self._update_collapsed_state()
 
     def _update_collapsed_state(self, animated=True):
@@ -357,23 +349,50 @@ class Notch(QMainWindow):
         else:
             super().keyPressEvent(event)
 
-    def _on_ptt_press(self, event: QMouseEvent):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self.voice.start_recording()
-            
-    def _on_ptt_release(self, event: QMouseEvent):
-        if event.button() == Qt.MouseButton.LeftButton:
+    def _toggle_recording(self):
+        if self.voice.is_recording:
             self.voice.stop_recording()
+            # Update button visual state if needed, though wave_widget already indicates recording
+        else:
+            self.synthesizer.stop()
+            self.voice.start_recording()
 
     def _on_transcription_ready(self, text):
         self.input.setText(text)
         self.send()
         
+    def _update_ptt_btn_style(self, is_recording):
+        if is_recording:
+            self.ptt_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {ERROR_COLOR};
+                    color: #FFFFFF;
+                    border-radius: 22px;
+                    border: 1px solid {ERROR_COLOR};
+                    font-size: 18px;
+                }}
+                QPushButton:hover {{ background-color: #E63E34; }}
+            """)
+        else:
+            self.ptt_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: #1A1A1C;
+                    color: {TEXT};
+                    border-radius: 22px;
+                    border: 1px solid {BORDER};
+                    font-size: 18px;
+                }}
+                QPushButton:hover {{ background-color: #252528; }}
+                QPushButton:pressed {{ background-color: {ERROR_COLOR}; color: #FFFFFF; }}
+            """)
+
     def _on_voice_status(self, status):
         if status == "Recording...":
             self.wave_widget.start()
+            self._update_ptt_btn_style(True)
         else:
             self.wave_widget.stop()
+            self._update_ptt_btn_style(False)
         self._update_collapsed_state()
 
     # ---- chat -------------------------------------------------------------
@@ -434,6 +453,11 @@ class Notch(QMainWindow):
         self.title.setText("")
         self._update_collapsed_state()
         self.input.setFocus()
+        
+        if self.agent.history and self.agent.history[-1]["role"] == "assistant":
+            content = self.agent.history[-1].get("content", "").strip()
+            if content:
+                self.synthesizer.speak(content)
 
     def _on_error(self, msg):
         print(f"AGENT ERROR: {msg}")

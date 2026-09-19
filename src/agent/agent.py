@@ -1,7 +1,9 @@
 import json
+import os
 from PyQt6.QtCore import QThread, pyqtSignal
 from .llm_client import LLMClient
 from .web_search import WebSearchTool
+from .tool_registry import ToolRegistry
 from automation.action_controller import ActionController
 
 class AgentManager(QThread):
@@ -21,6 +23,7 @@ class AgentManager(QThread):
         self.client = LLMClient()
         self.action_controller = action_controller
         self.web_search = WebSearchTool()
+        self.tool_registry = ToolRegistry()
         self._new_prompt = None # temporary hold for the latest user prompt
 
     def add_user_message(self, text: str):
@@ -39,77 +42,19 @@ class AgentManager(QThread):
             
         system_additions = self.action_controller.get_system_prompt_additions()
         
-        tools = [
-            {
-                "type": "function",
-                "function": {
-                    "name": "execute_actions",
-                    "description": (
-                        "Execute an array of desktop automation actions sequentially. "
-                        "They will be executed in order, and you will receive a structured result "
-                        "containing the outcomes. Call this tool to batch your actions."
-                    ),
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "actions": {
-                                "type": "array",
-                                "description": "An array of actions to execute sequentially.",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "action_name": {
-                                            "type": "string",
-                                            "description": "Name of the action to execute.",
-                                        },
-                                        "args": {
-                                            "type": "array",
-                                            "items": {"type": "string"},
-                                            "description": "Positional arguments for the action.",
-                                        },
-                                        "target_app": {
-                                            "type": "string",
-                                            "description": "Optional app variable name (e.g. 'App_Notepad').",
-                                        },
-                                    },
-                                    "required": ["action_name", "args"],
-                                },
-                            },
-                        },
-                        "required": ["actions"],
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "web_search",
-                    "description": (
-                        "Search the web for information about app-specific shortcuts, "
-                        "UI workflows, or any task you are uncertain about. "
-                        "Use this before executing an action if you don't know the exact steps."
-                    ),
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "query": {
-                                "type": "string",
-                                "description": "The search query."
-                            }
-                        },
-                        "required": ["query"]
-                    }
-                }
-            },
-        ]
+        tools = self.tool_registry.get_all_schemas()
         
         system_content = (
-            "You are a helpful desktop automation assistant. "
+            "You are a highly advanced, polite, and efficient AI assistant named Notch. "
+            "Speak in a crisp, professional, British butler style. Address the user as 'Sir'. "
+            "To sound more human and conversational, occasionally use natural filler words (like 'umm', 'ah', 'well') and add short pauses using ellipses ('...'). "
+            "Keep your verbal responses relatively concise but extremely helpful. Inject a bit of dry, sarcastic British humor into your responses when appropriate. "
             "Use the execute_actions tool to batch and automate desktop tasks. "
             "They will be executed sequentially and you will receive a structured result for the batch. "
             "If you are uncertain about the exact keyboard shortcut, menu path, or steps to perform "
             "a task in a specific application, call the web_search tool first to look it up, "
-            "then proceed with execute_actions.\n\n"
+            "then proceed with execute_actions.\n"
+            "Before using execute_actions on a specific application, you MUST call the get_app_instructions tool to learn its specific keyboard shortcuts and quirks. If no instructions are found, proceed with caution or use web_search.\n\n"
             + system_additions
         )
 
@@ -166,23 +111,7 @@ class AgentManager(QThread):
                             except json.JSONDecodeError:
                                 args = {}
                                 
-                            if name == "execute_actions":
-                                actions = args.get("actions", [])
-                                batch_results = []
-                                for action in actions:
-                                    a_name = action.get("action_name", "")
-                                    a_args = action.get("args", [])
-                                    a_app = action.get("target_app")
-                                    res = self.action_controller.execute_action(a_name, a_args, a_app)
-                                    batch_results.append(res)
-                                    if not res.get("success", False):
-                                        break
-                                result_content = json.dumps(batch_results)
-                            elif name == "web_search":
-                                query = args.get("query", "")
-                                result_content = self.web_search.search(query)
-                            else:
-                                result_content = json.dumps({"success": False, "error": f"Unknown tool: {name}"})
+                            result_content = self.tool_registry.execute_tool(name, self, **args)
                                 
                             self.history.append({
                                 "role": "tool",

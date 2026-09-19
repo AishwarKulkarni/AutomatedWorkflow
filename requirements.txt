@@ -9,3 +9,5 @@ faster-whisper
 sounddevice
 numpy
 scipy
+edge-tts
+pygame

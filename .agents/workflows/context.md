@@ -8,74 +8,78 @@ description: Analized Report of whole Project
 
 > **Last Updated:** Branch `feature/voice-feedback`, Commit `d029936 Added Voice Cmds Feature & some Improvemnts`
 
+# Notch Automated Workflow Project Analysis
+
+This document provides a detailed analysis of the **Notch** project, a highly advanced desktop AI assistant built in Python that combines LLM reasoning, voice interaction, and desktop automation via AutoHotkey.
+
+## 1. Project Architecture & Stack
+
+The project is structured as a modular Python desktop application.
+
+**Core Stack:**
+
+- **UI Framework:** PyQt6 (for the modern, responsive widget overlay).
+- **LLM Integration:** OpenRouter API streaming completions (`requests`, `json`).
+- **Automation:** AutoHotkey (AHK) for low-level OS and application control.
+- **Voice/Audio:** `faster-whisper` (transcription), `edge-tts` (synthesis), `sounddevice`, `pygame`.
+- **Environment:** `python-dotenv` for configuration, `keyboard` for global hotkeys.
+
+**Directory Structure:**
+
+- `src/agent/`: Contains the LLM client, prompt generation, tool registry, and workflow management.
+- `src/agent/tools/`: Dynamically loaded Python tools exposed to the LLM (e.g., executing AHK actions, reading context).
+- `src/automation/`: Manages the AHK subprocess bridge and action manifest parsing.
+- `src/automation/autohotkey/`: The AHK scripts themselves (`agent_runner.ahk`, `apps.ahk`, etc.).
+- `src/ui/`: Contains the PyQt6 user interface (`ui.py`).
+- `src/voice/`: Handles speech-to-text (transcriber) and text-to-speech (synthesizer).
+- `workflows/` & `.agents/`: Storage for chat histories and predefined markdown workflows.
+
 ---
 
-# Project Context: Notch Desktop Automation Assistant
+## 2. Key Features and Implementation
 
-## Overview
+### A. Dynamic, "Spotlight-Style" User Interface
 
-Notch is a Python-based desktop automation assistant that features a sleek, borderless UI built with PyQt6. It acts as an agent running in the background, which can be instantly toggled using a global hotkey (`Ctrl+Space`). The assistant communicates with the Groq API (using large language models) to determine actions based on user input, and then uses a persistent AutoHotkey (AHK v2) subprocess to seamlessly execute these desktop automation commands.
+The UI (`src/ui/ui.py`) is designed to be unobtrusive and highly polished, similar to Apple's Spotlight or Dynamic Island.
 
-The LLM also has access to a `web_search` tool backed by DuckDuckGo (via the `ddgs` package) for general queries. For app-specific shortcuts or UI workflows, the LLM relies on a local knowledge base of per-app instructions stored in `.agents/context/apps/`. If a shortcut is missing, it will ask the user and learn it, rather than searching the web.
+- **Implementation:** Built using a frameless `QMainWindow` with a translucent background. It stays on top (`WindowStaysOnTopHint`) and handles global focus stealing when activated.
+- **Animations:** Uses `QPropertyAnimation` for smooth expansion and collapsing based on whether the agent is active or idle.
+- **Visuals:** Features an animated liquid/organic audio visualizer (`WaveWidget`) that renders via `QPainter` with math functions (`math.sin`) for organic wave motion.
+- **Chat Display:** Renders the conversation history using a `QTextBrowser`, displaying user messages, agent responses, and dynamically formatting LLM tool calls (like executing AHK actions or searching the web).
+- **Auto-completion:** Typing `/` in the input field triggers a dropdown (`QListWidget`) suggesting available markdown workflows based on files in `.agents/context/workflows/`.
 
-## Architecture and Data Flow
+### B. LLM Agent & Conversational Loop
 
-1. **User Input:** The user triggers the UI via `Ctrl+Space` and inputs a request in the Notch chat window.
-2. **LLM Processing:** The `AgentManager` sends the chat history to the Groq API via `LLMClient`, providing a system prompt and two tools: `execute_actions` and `web_search`.
-3. **Knowledge Retrieval:** If the LLM is uncertain about the exact steps or shortcut for an app, it checks the corresponding instruction file in `.agents/context/apps/`. If the information isn't there, it asks the user and updates the file for future use.
-4. **Tool Invocation:** The LLM calls `execute_actions` with a **batch array** of actions (each having an `action_name`, `args`, and optional `target_app`).
-5. **Validation & Execution:** The `AgentManager` runs each action sequentially via `ActionController`, stopping the batch early if any action fails.
-6. **AHK Bridge:** The `AHKBridge` sends a JSON command to the persistent `agent_runner.ahk` script via `stdin`.
-7. **Result:** The AHK script executes the Windows automation, captures the result, and writes a JSON response back to `stdout`. The batch result array is fed back into the LLM chat history.
+The core intelligence is driven by `src/agent/agent.py` and `llm_client.py`.
 
-## Directory Structure and Key Files
+- **Streaming Client:** Communicates with OpenRouter. The `stream_chat` method yields text chunks for the UI to display in real-time and accumulates JSON arguments for tool calls.
+- **System Prompt Injection:** The agent is instructed to act as "Notch", a crisp, professional British butler. The `ActionController` dynamically injects the `ahk_manifest.md` (the Single Source of Truth for valid AHK actions) directly into the system prompt.
+- **Tool Execution Loop:** When the LLM calls a tool, the agent parses the JSON, executes the tool via the `ToolRegistry`, appends the tool's result to the history, and immediately streams a follow-up response in a continuous loop.
+- **Failsafe:** Implements an automatic stop if 3 consecutive tool failures occur to prevent infinite API loops.
 
-### Root
+### C. Persistent Desktop Automation (AHK Bridge)
 
-- `.env`: Stores environment variables like `GROQ_API_KEY` and `GROQ_MODEL`.
-- `requirements.txt`: Python dependencies (`PyQt6`, `requests`, `python-dotenv`, `keyboard`, `pytest`, `duckduckgo-search`, `ddgs`).
-- `.agents/context/ahk_manifest.md`: Contains the manifest defining available AHK actions and automation guidelines for the LLM.
-- `.agents/context/apps/`: Contains per-app markdown files (e.g., `Notepad.md`) detailing specific shortcuts, workflows, and UI quirks learned by the LLM.
+Instead of launching a slow AutoHotkey executable for every individual action, the project uses a highly efficient persistent bridge (`src/automation/ahk_bridge.py`).
 
-### `src/` (Python Source)
+- **Subprocess Management:** It spawns `agent_runner.ahk` via `subprocess.Popen` with piped `stdin` and `stdout`.
+- **JSON IPC (Inter-Process Communication):** The Python bridge sends commands as JSON strings over `stdin`. The AHK script reads these, executes the requested action (defined in `controls.ahk` or `apps.ahk`), and writes a JSON result back to `stdout`.
+- **Action Controller:** `action_controller.py` acts as a middleman. It parses `.agents/context/ahk_manifest.md` using regex to discover valid action names and ensures the LLM can only request valid actions.
 
-- `main.py`: Entry point. Loads environment variables and initializes the `Notch` UI.
-- **`ui/ui.py`**: The main interface. A borderless PyQt6 window that stays on top. Handles state (collapsed vs. expanded), renders chat history including:
-  - `execute_actions` → renders each action in the batch as `Executing: <name>(<args>)`
-  - `web_search` → renders a muted `🔍 Searched: "..."` chip
-- **`agent/agent.py`**: Contains `AgentManager` which orchestrates the conversational loop. Manages chat history, invokes the LLM, parses tool calls, and handles execution results for both tools.
-- **`agent/llm_client.py`**: A lightweight HTTP client using `requests` to stream completions from Groq's OpenAI-compatible API.
-- **`agent/web_search.py`**: `WebSearchTool` — wraps `ddgs.DDGS` to search DuckDuckGo. Lazy-imports the library, returns top-3 results as a formatted string (title + snippet + URL). Never raises; returns an error string on failure.
-- **`automation/action_controller.py`**: The `ActionController` parses `.agents/context/ahk_manifest.md` (or fallback variables from `apps.ahk`) to provide the system prompt with valid tools. Dispatches valid actions to the AHK Bridge.
-- **`automation/ahk_bridge.py`**: A robust manager for the AutoHotkey subprocess. Spawns `agent_runner.ahk`, handles JSON IPC via `stdin`/`stdout`, captures `stderr` for logging, and automatically restarts the AHK process if it crashes.
-- **`utils/utils.py`**: OS-level helpers, including `_steal_windows_focus` (to reliably foreground the app on Windows) and `HotkeyThread` (listens for `Ctrl+Space` globally).
+### D. Workflow Manager
 
-### `src/automation/autohotkey/` (AHK Scripts)
+The system can execute complex, multi-step procedures defined in markdown files (`src/agent/workflow_manager.py`).
 
-- **`agent_runner.ahk`**: A persistent AHK v2 script that loops on `stdin`. Parses incoming JSON commands, resolves variable references for target applications, dynamically invokes the appropriate AHK functions, and returns a JSON result on `stdout`.
-- `controls.ahk`, `apps.ahk`, `libraries/JSON.ahk`: Supporting AHK scripts defining window controls, application targets, and JSON parsing.
+- **Triggering:** The user can trigger workflows explicitly via `/workflow-name` or via natural language (e.g., "start the build workflow").
+- **Parsing:** It reads a markdown file and splits it by `## ` headers, where each header represents a distinct task.
+- **Execution:** It feeds tasks to the LLM one by one. The LLM is instructed to call a specific `mark_task_completed.py` tool when it finishes a task, triggering the `WorkflowManager` to advance to the next step and feed the next prompt.
 
-## Technology Stack
+### E. Voice Interaction & Hotkeys
 
-- **Language:** Python 3, AutoHotkey v2
-- **UI Framework:** PyQt6
-- **LLM Provider:** Groq API (OpenAI-compatible endpoints)
-- **Key Libraries:** `keyboard` (global hotkeys), `requests` (LLM API), `python-dotenv`, `ddgs` (DuckDuckGo web search).
+- **Global Hotkeys:** Uses a background `HotkeyThread` (via the `keyboard` library) to globally toggle the UI visibility and the push-to-talk recording feature without needing window focus.
+- **Transcription (STT):** `VoiceTranscriber` records system audio and uses `faster-whisper` for quick, local transcription. When ready, it automatically populates the input field and sends the message.
+- **Synthesis (TTS):** `VoiceSynthesizer` uses `edge-tts` (specifically the `en-GB-RyanNeural` voice to match the British butler persona) to read the assistant's final responses aloud.
 
-## LLM Tools Reference
+### F. Dynamic Tool Registry
 
-| Tool | When used | Schema |
-|---|---|---|
-| `execute_actions` | Run one or more desktop automation actions as a batch | `{ actions: [{ action_name, args[], target_app? }] }` |
-| `web_search` | Look up general information (Note: not to be used for app shortcuts) | `{ query: string }` |
-
-The system prompt instructs the model: *"Before attempting to automate an unfamiliar application, always check if an instruction file exists in `.agents/context/apps/[AppName].md`. If the file doesn't exist or is missing a shortcut, DO NOT search the web. Instead, stop and ask the user for the correct shortcut, then self-learn by updating the file."*
-
-## Important Design Patterns
-
-- **Persistent IPC:** Instead of spawning a new AHK process per command (slow), `ahk_bridge.py` maintains a long-running subprocess of `agent_runner.ahk`.
-- **Batched Actions:** `execute_actions` accepts an array of actions executed sequentially. The batch stops early on the first failure — the full result array (with per-action outcomes) is returned to the LLM.
-- **Per-App Self-Learning:** The LLM maintains a local knowledge base of app instructions. It asks the user for missing shortcuts and updates `.agents/context/apps/` dynamically, avoiding brittle web searches.
-- **System Prompt Injection:** The LLM's system prompt dynamically loads available apps and actions parsed by `ActionController` from `ahk_manifest.md` and `apps.ahk`.
-- **Deep Modules:** Classes like `AgentManager`, `ActionController`, and `WebSearchTool` encapsulate large portions of logic to keep the top-level application structure simple.
-
+- **Implementation:** `src/agent/tool_registry.py` uses `importlib` and `inspect` to dynamically discover and load any class inheriting from `BaseTool` inside the `src/agent/tools/` directory.
+- **Scalability:** This makes it trivial to add new capabilities (like `execute_actions.py`, `read_context_file.py`, or web search) without modifying the core agent loop.

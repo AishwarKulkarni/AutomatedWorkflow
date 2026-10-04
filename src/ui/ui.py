@@ -7,10 +7,10 @@ import math
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLineEdit, QTextBrowser, QLabel, QFrame, QGraphicsDropShadowEffect,
-    QPushButton,
+    QPushButton, QListWidget, QListWidgetItem, QMenu
 )
 from PyQt6.QtCore import Qt, QPropertyAnimation, QRect, QRectF, QEasingCurve, QTimer, QEvent
-from PyQt6.QtGui import QColor, QMouseEvent, QPainter
+from PyQt6.QtGui import QColor, QMouseEvent, QPainter, QAction
 from agent.agent import AgentManager
 from automation.action_controller import ActionController
 from utils.utils import HotkeyThread, _steal_windows_focus
@@ -106,6 +106,8 @@ class Notch(QMainWindow):
         super().__init__()
         self.expanded = False
         
+        os.makedirs("workflows", exist_ok=True)
+        
         self.action_controller = ActionController()
         self.action_controller.start()
         
@@ -114,6 +116,7 @@ class Notch(QMainWindow):
         self.agent.history_updated.connect(self._on_history_updated)
         self.agent.finished_ok.connect(self._on_done)
         self.agent.failed.connect(self._on_error)
+        self.agent.status_update.connect(self._on_status_update)
         
         self.voice = VoiceTranscriber()
         self.voice.transcription_ready.connect(self._on_transcription_ready)
@@ -183,16 +186,61 @@ class Notch(QMainWindow):
 
         header.addStretch()
         
+        self.client_btn = QPushButton("OpenRouter")
+        self.client_btn.setFixedHeight(20)
+        self.client_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.client_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.client_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {MUTED};
+                border: none;
+                font: 600 11px {FONT};
+                padding: 0 2px;
+            }}
+            QPushButton:hover {{ color: {TEXT}; }}
+            QPushButton::menu-indicator {{ image: none; }}
+        """)
+        
+        client_menu = QMenu(self)
+        client_menu.setStyleSheet(f"""
+            QMenu {{
+                background-color: #1A1A1C;
+                color: {TEXT};
+                border: 1px solid {BORDER};
+                border-radius: 6px;
+                padding: 4px;
+            }}
+            QMenu::item {{
+                padding: 4px 12px;
+                border-radius: 4px;
+                font: 600 11px {FONT};
+            }}
+            QMenu::item:selected {{
+                background-color: #252528;
+                color: {ACCENT};
+            }}
+        """)
+        
+        for client_name in ["OpenRouter", "Groq", "Gemini"]:
+            action = QAction(client_name, self)
+            action.triggered.connect(lambda checked, name=client_name: self._on_client_changed(name))
+            client_menu.addAction(action)
+            
+        self.client_btn.setMenu(client_menu)
+        self.client_btn.hide()
+        header.addWidget(self.client_btn)
+        
+        header.addSpacing(1)
+        
         self.new_chat_btn = QPushButton("+")
         self.new_chat_btn.setFixedSize(20, 20)
-        self.new_chat_btn.setStyleSheet(f"QPushButton {{ background: transparent; color: {MUTED}; border: none; font-size: 20px; font-weight: normal; margin-bottom: 2px; }} QPushButton:hover {{ color: {TEXT}; }}")
+        self.new_chat_btn.setStyleSheet(f"QPushButton {{ background: transparent; color: {MUTED}; border: none; font-size: 20px; font-weight: normal; margin-bottom: 3px; }} QPushButton:hover {{ color: {TEXT}; }}")
         self.new_chat_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.new_chat_btn.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.new_chat_btn.clicked.connect(self.start_new_chat)
         self.new_chat_btn.hide()
         header.addWidget(self.new_chat_btn)
-        
-        header.addSpacing(4)
 
         layout.addLayout(header)
 
@@ -248,6 +296,8 @@ class Notch(QMainWindow):
             }}
         """)
         self.input.returnPressed.connect(self.send)
+        self.input.textChanged.connect(self._on_input_text_changed)
+        self.input.installEventFilter(self)
         
         self.ptt_btn = QPushButton("🎙")
         self.ptt_btn.setFixedSize(44, 44)
@@ -259,6 +309,33 @@ class Notch(QMainWindow):
         self.input.hide()
         self.ptt_btn.hide()
         
+        self.suggestion_list = QListWidget()
+        self.suggestion_list.hide()
+        self.suggestion_list.setStyleSheet(f"""
+            QListWidget {{
+                background-color: #1A1A1C;
+                color: {TEXT};
+                border: 1px solid {BORDER};
+                border-radius: 12px;
+                padding: 4px;
+                font: 14px {FONT};
+                outline: none;
+            }}
+            QListWidget::item {{
+                padding: 8px 12px;
+                border-radius: 8px;
+            }}
+            QListWidget::item:hover, QListWidget::item:selected {{
+                background-color: #252528;
+                color: {ACCENT};
+            }}
+        """)
+        self.suggestion_list.setFixedHeight(120)
+        self.suggestion_list.itemClicked.connect(self._on_suggestion_clicked)
+        self.suggestion_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
+        layout.addWidget(self.suggestion_list)
+        
         input_layout = QHBoxLayout()
         input_layout.setContentsMargins(0, 0, 0, 0)
         input_layout.setSpacing(8)
@@ -266,6 +343,60 @@ class Notch(QMainWindow):
         input_layout.addWidget(self.ptt_btn)
         
         layout.addLayout(input_layout)
+
+    def _on_input_text_changed(self, text):
+        if text.startswith("/"):
+            query = text[1:].lower()
+            workflows_dir = os.path.join(".agents", "context", "workflows")
+            suggestions = []
+            if os.path.exists(workflows_dir):
+                for f in os.listdir(workflows_dir):
+                    if f.endswith(".md"):
+                        cmd = f[:-3]
+                        if query in cmd.lower():
+                            suggestions.append("/" + cmd)
+            
+            if suggestions:
+                self.suggestion_list.clear()
+                self.suggestion_list.addItems(suggestions)
+                self.suggestion_list.setCurrentRow(0)
+                self.suggestion_list.show()
+            else:
+                self.suggestion_list.hide()
+        else:
+            self.suggestion_list.hide()
+
+    def _on_suggestion_clicked(self, item):
+        self.input.setText(item.text() + " ")
+        self.suggestion_list.hide()
+        self.input.setFocus()
+
+    def _on_client_changed(self, text):
+        self.client_btn.setText(text)
+        self.agent.client.set_client(text)
+
+    def eventFilter(self, obj, event):
+        if obj == self.input and event.type() == QEvent.Type.KeyPress:
+            if self.suggestion_list.isVisible():
+                if event.key() == Qt.Key.Key_Up:
+                    row = self.suggestion_list.currentRow()
+                    if row > 0:
+                        self.suggestion_list.setCurrentRow(row - 1)
+                    else:
+                        self.suggestion_list.setCurrentRow(self.suggestion_list.count() - 1)
+                    return True
+                elif event.key() == Qt.Key.Key_Down:
+                    row = self.suggestion_list.currentRow()
+                    if row < self.suggestion_list.count() - 1:
+                        self.suggestion_list.setCurrentRow(row + 1)
+                    else:
+                        self.suggestion_list.setCurrentRow(0)
+                    return True
+                elif event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Tab):
+                    if self.suggestion_list.currentRow() >= 0:
+                        self._on_suggestion_clicked(self.suggestion_list.currentItem())
+                        return True
+        return super().eventFilter(obj, event)
 
     def _place(self, w, h):
         screen = QApplication.primaryScreen().geometry()
@@ -285,6 +416,7 @@ class Notch(QMainWindow):
         self.input.show()
         self.ptt_btn.show()
         self.new_chat_btn.show()
+        self.client_btn.show()
         self.notch_label.show()
         self._render()
         self._animate(*EXPANDED_SIZE)
@@ -299,6 +431,7 @@ class Notch(QMainWindow):
         self.ptt_btn.hide()
         self.notch_label.hide()
         self.new_chat_btn.hide()
+        self.client_btn.hide()
         self._update_collapsed_state()
 
     def _update_collapsed_state(self, animated=True):
@@ -432,14 +565,23 @@ class Notch(QMainWindow):
             return
         self.input.clear()
         self.input.setDisabled(True)
+        
         self.input.setPlaceholderText("Thinking")
         self.title.setText("Thinking")
         self._update_collapsed_state()
 
-        self.agent.add_user_message(text)
+        self.agent.process_input(text)
         
         self.agent.is_cancelled = False
         self.agent.start()
+
+    def _on_status_update(self, status: str):
+        if status == "Workflow":
+            self.input.setPlaceholderText("Running Workflow...")
+            self.title.setText("Workflow")
+        elif status == "":
+            self.title.setText("")
+        self._update_collapsed_state()
 
     def _on_chunk(self, chunk):
         self._render()
@@ -466,6 +608,8 @@ class Notch(QMainWindow):
     def _render(self):
         blocks = []
         for msg in self.agent.history:
+            if msg.get("hide_in_ui"):
+                continue
             if msg["role"] not in ("user", "assistant"):
                 continue
             is_user = msg["role"] == "user"

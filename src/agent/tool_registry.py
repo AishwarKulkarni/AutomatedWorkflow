@@ -33,7 +33,8 @@ class ToolRegistry:
                             tool_instance = obj()
                             self.tools[tool_instance.name] = tool_instance
                 except Exception as e:
-                    print(f"Failed to load tool from {filename}: {e}")
+                    import logging
+                    logging.warning(f"Failed to load tool from {filename}: {e}")
 
     def get_all_schemas(self) -> List[Dict[str, Any]]:
         """Return a list of JSON schemas for all registered tools."""

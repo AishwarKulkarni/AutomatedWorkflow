@@ -38,16 +38,21 @@ class ActionController:
                     seen.add(name)
                     action_names.append(name)
 
-        body = re.sub(r"^---[\s\S]*?---\n", "", content, count=1).strip()
-        return {"action_names": action_names, "prompt_block": body}
+        return {"action_names": action_names}
 
     def get_system_prompt_additions(self) -> str:
-        """Returns the system prompt block and available apps."""
-        prompt_block = self._manifest.get("prompt_block", "")
-        if prompt_block:
-            return prompt_block
+        """Returns a concise system prompt block with available apps and actions."""
+        additions = "You can automate tasks using AutoHotkey. For detailed information on features like Workflows, UIAutomation, or App Instructions, use the `read_context_file` tool to read 'notch_features.md'.\n\n"
+        
+        # Inject manifest directly into the system prompt as the single source of truth
+        if os.path.exists(self._MANIFEST_PATH):
+            with open(self._MANIFEST_PATH, "r", encoding="utf-8") as f:
+                additions += f"--- AHK MANIFEST (SINGLE SOURCE OF TRUTH) ---\n{f.read()}\n-------------------------------------------\n\n"
+        
+        valid_actions = self._manifest.get("action_names", [])
+        if valid_actions:
+            additions += f"Valid Action Names: {', '.join(valid_actions)}\n\n"
             
-        # Fallback to apps parsing if no manifest block
         available_apps = {}
         try:
             with open("src/automation/autohotkey/apps.ahk", "r", encoding="utf-8") as f:
@@ -60,11 +65,12 @@ class ActionController:
         except Exception:
             pass
         
-        app_list_str = "Available apps you can control (pass the exact variable name to target_app):\n"
-        for name, val in available_apps.items():
-            app_list_str += f"- {name}: '{val}'\n"
+        if available_apps:
+            additions += "Available apps you can control (pass the exact variable name to target_app):\n"
+            for name, val in available_apps.items():
+                additions += f"- {name}: '{val}'\n"
             
-        return app_list_str
+        return additions
 
     def execute_action(self, action_name: str, args: list[str] | None = None, target_app: str | None = None) -> dict[str, Any]:
         """Validates the action name and delegates to AHKBridge."""

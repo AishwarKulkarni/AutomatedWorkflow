@@ -1,15 +1,14 @@
-import os
-import tempfile
+import io
 import threading
 import asyncio
 import edge_tts
 import pygame
 import re
+import logging
 
 class VoiceSynthesizer:
     def __init__(self, voice="en-GB-RyanNeural"):
         self.voice = voice
-        pygame.mixer.init()
         self.is_speaking = False
         self._playback_thread = None
 
@@ -34,41 +33,46 @@ class VoiceSynthesizer:
         self._playback_thread.start()
 
     def _generate_and_play(self, text: str):
-        # We need a temp file to store the audio
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as f:
-            temp_path = f.name
-        
         try:
             # Generate audio using edge-tts
             communicate = edge_tts.Communicate(text, self.voice)
-            asyncio.run(communicate.save(temp_path))
+            audio_data = bytearray()
+            
+            async def generate_audio():
+                async for chunk in communicate.stream():
+                    if chunk["type"] == "audio":
+                        audio_data.extend(chunk["data"])
+                        
+            asyncio.run(generate_audio())
             
             if not self.is_speaking:
-                # Was stopped during generation
                 return
                 
-            # Play the audio
-            pygame.mixer.music.load(temp_path)
+            # Initialize pygame mixer in the playback thread for safety
+            if not pygame.mixer.get_init():
+                pygame.mixer.init()
+                
+            audio_stream = io.BytesIO(audio_data)
+            pygame.mixer.music.load(audio_stream)
             pygame.mixer.music.play()
             
-            # Wait until it finishes, while checking if we were stopped
             while pygame.mixer.music.get_busy() and self.is_speaking:
                 pygame.time.Clock().tick(10)
                 
         except Exception as e:
-            print(f"Error playing TTS: {e}")
+            logging.error(f"Error playing TTS: {e}")
         finally:
-            if os.path.exists(temp_path):
-                try:
-                    # Sometimes pygame keeps file handle open slightly longer,
-                    # unloading the music frees it.
-                    pygame.mixer.music.unload()
-                    os.remove(temp_path)
-                except Exception as e:
-                    print(f"Failed to remove temp audio file: {e}")
+            try:
+                pygame.mixer.music.unload()
+                # We can keep mixer initialized for the next run, or quit it.
+            except Exception:
+                pass
             self.is_speaking = False
 
     def stop(self):
         self.is_speaking = False
-        if pygame.mixer.music.get_busy():
-            pygame.mixer.music.stop()
+        try:
+            if pygame.mixer.get_init() and pygame.mixer.music.get_busy():
+                pygame.mixer.music.stop()
+        except Exception:
+            pass

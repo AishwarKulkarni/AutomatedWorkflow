@@ -1,4 +1,5 @@
 #Requires AutoHotkey v2.0
+#Include libraries/UIA.ahk
 
 ; Clicks at a specific coordinate and waits briefly
 ClickAt(x, y) {
@@ -128,4 +129,99 @@ WriteFileContent(filePath, content) {
 TypeText(text) {
     SendText(text)
     Sleep(500)
+}
+
+; --- UIA Functions ---
+
+; Gets the active TargetApp window as a UIA element
+_GetTargetAppUIA() {
+    global TargetApp
+    if (TargetApp = "")
+        return UIA.ElementFromHandle(WinActive("A"))
+    
+    ; Focus the app first
+    FocusApp()
+    return UIA.ElementFromHandle(WinExist(TargetApp))
+}
+
+; Wait for the target window to be active
+WaitWindowActive(winTitle := "", timeoutSec := 5) {
+    global TargetApp
+    target := (winTitle != "") ? winTitle : TargetApp
+    if (target = "")
+        target := "A" ; Active window
+    
+    if WinWaitActive(target, , timeoutSec)
+        return true
+    return false
+}
+
+; Clicks an element by name and optional control type
+UIA_ClickElement(name, controlType := "", timeoutMs := 5000) {
+    try {
+        el := _GetTargetAppUIA()
+        if !el
+            return false
+        
+        condition := {Name: name, MatchMode: "Exact"}
+        if (controlType != "")
+            condition.Type := controlType
+        
+        foundEl := el.WaitElement(condition, timeoutMs)
+        if !foundEl
+            return false
+            
+        foundEl.Click()
+        Sleep(500)
+        return true
+    } catch {
+        return false
+    }
+}
+
+; Gets the text/value of an element
+UIA_GetElementText(name, controlType := "", timeoutMs := 5000) {
+    try {
+        el := _GetTargetAppUIA()
+        if !el
+            return ""
+        
+        condition := {Name: name, MatchMode: "Exact"}
+        if (controlType != "")
+            condition.Type := controlType
+            
+        foundEl := el.WaitElement(condition, timeoutMs)
+        if !foundEl
+            return ""
+            
+        val := foundEl.Value
+        if (val = "")
+            val := foundEl.Name
+        return val
+    } catch {
+        return ""
+    }
+}
+
+; Sets the text of an element (usually an Edit control)
+UIA_SetElementText(name, text, controlType := "", timeoutMs := 5000) {
+    try {
+        el := _GetTargetAppUIA()
+        if !el
+            return false
+        
+        condition := {Name: name, MatchMode: "Exact"}
+        if (controlType != "")
+            condition.Type := controlType
+            
+        foundEl := el.WaitElement(condition, timeoutMs)
+        if !foundEl
+            return false
+            
+        foundEl.Value := text
+        Sleep(500)
+        return true
+    } catch {
+        return false
+    }
 }

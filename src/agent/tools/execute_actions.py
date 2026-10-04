@@ -19,9 +19,13 @@ class ExecuteActionsTool(BaseTool):
                 "parameters": {
                     "type": "object",
                     "properties": {
+                        "plan": {
+                            "type": "string",
+                            "description": "Your step-by-step plan for this batch of actions. You MUST explain what you are going to do and why before executing the actions.",
+                        },
                         "actions": {
                             "type": "array",
-                            "description": "An array of actions to execute sequentially.",
+                            "description": "An array of up to 5 actions to execute sequentially in this batch.",
                             "items": {
                                 "type": "object",
                                 "properties": {
@@ -43,7 +47,7 @@ class ExecuteActionsTool(BaseTool):
                             },
                         },
                     },
-                    "required": ["actions"],
+                    "required": ["plan", "actions"],
                 },
             },
         }

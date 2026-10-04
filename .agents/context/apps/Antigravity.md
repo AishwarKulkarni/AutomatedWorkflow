@@ -1,34 +1,32 @@
 ---
-app_name: "Antigravity"
-executable: "Antigravity.exe"
+app_name: "Antigravity IDE"
+executable: "antigravity.exe"
 ---
-
-# Antigravity Automation Guide
+# Antigravity IDE Automation Guide
 
 ## Keyboard Shortcuts
-
-| Task                 | Shortcut   | Notes                                      |
-| -------------------- | ---------- | ------------------------------------------ |
-| Inline Command (IDE) | `^i`       | Opens instructive inline modality          |
-| Accept Suggestion    | `{Tab}`    | Accepts autocomplete suggestion            |
-| Cancel Suggestion    | `{Esc}`    | Cancels autocomplete                       |
-| Accept Word          | `^{Right}` | Accepts suggestion word-by-word            |
-| New Chat             | `^+l`      | Opens a new chat in Sidebar Chat Canvas    |
-| Slash Command        | `/`        | Triggers slash command menu in Chat Canvas |
-| Mention Context      | `@`        | Opens mention menu in Chat Canvas          |
+| Task | Shortcut | Notes |
+|---|---|---|
+| Command Palette | `^+p` | Wait 200ms for palette dropdown |
+| Quick Open / File Search| `^p` | Wait 200ms for search input |
+| Global Search | `^+f` | Focuses the search sidebar |
+| Toggle Terminal | `^`` | Focuses or hides the integrated terminal |
+| Toggle Sidebar | `^b` | |
+| Open Settings | `^,` | Opens settings tab |
+| Focus Chat / AI | `^+l` | Focuses the main AI chat window (if applicable) |
+| Inline Chat | `^i` | Opens inline AI generation |
+| Accept Inline Suggestion | `{Tab}` | When a ghost text suggestion is visible |
+| Save File | `^s` | |
+| Close Editor | `^w` | |
+| Switch Editor Tab | `^{Tab}` | |
 
 ## Common Workflows
-
-- **Trigger Slash Command:** Type `/` in the chat canvas, wait for the menu to appear, type the command name, and press `{Enter}`.
-- **Add Context:** Type `@` in the chat canvas, wait for the menu, type the context name (e.g., file name), and press `{Enter}`.
-- **Inline Edit (IDE):** Select the target text block, press `^i`, wait for the input prompt to appear, type your instructions, and press `{Enter}`.
-
-## Specific Workflows
-
-- **Use a Skill:** Open the Chat Canvas, type or paste `/skill_name`, press `{Tab}` to select the desired skill, paste your prompt, and press `{Enter}` to execute.
+- **Open a specific file:** Press `^p`, wait 200ms, type the filename, wait for results to filter, and press `{Enter}`.
+- **Run a command from palette:** Press `^+p`, wait 200ms, type the command name, and press `{Enter}`.
+- **Focus Terminal to run a script:** Press `^``, wait 200ms, type the command (e.g., `npm run dev`), and press `{Enter}`.
 
 ## UI Quirks / Gotchas
-
-- Antigravity consists of both the **Antigravity IDE** (`Code.exe`) and **Antigravity 2.0** desktop app (`Antigravity.exe`). Automation flows should target the correct window.
-- When automating the Chat Canvas, ensure the chat input field has focus before typing.
-- Slash commands (`/`) and context mentions (`@`) trigger asynchronous popup menus. Always include a small delay after typing `/` or `@` to allow the menu to render before sending further keystrokes.
+- Antigravity IDE is built on web technologies (like Electron or similar), which means its UIA tree can be extremely deep and complex. Traversing the entire tree via UIA might be slow.
+- Popups, dropdowns, and hover widgets (like the Command Palette or IntelliSense suggestions) are often transient and might disappear if the window loses focus.
+- Keybindings can be highly customized by the user, so the default shortcuts listed above might be overridden in specific user environments.
+- AI panels or sidebars might require waiting for content generation or loading states before interacting with elements within them.

@@ -15,6 +15,7 @@ from agent.agent import AgentManager
 from automation.action_controller import ActionController
 from utils.utils import HotkeyThread, _steal_windows_focus
 from voice.transcriber import VoiceTranscriber
+from voice.tts import TTSManager
 # ---- Look & feel -----------------------------------------------------------
 BG = "#151517"
 BORDER = "#2A2A2D"
@@ -23,8 +24,8 @@ MUTED = "#7A7A7D"
 ACCENT = "#00FF7F"
 ERROR_COLOR = "#FF453A"
 FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, sans-serif"
-COLLAPSED_IDLE_WIDTH = 180
-COLLAPSED_ACTIVE_WIDTH = 200
+COLLAPSED_IDLE_WIDTH = 170
+COLLAPSED_ACTIVE_WIDTH = 180
 COLLAPSED_HEIGHT = 60
 EXPANDED_SIZE = (460, 520)
 
@@ -118,13 +119,16 @@ class Notch(QMainWindow):
         self.voice.transcription_ready.connect(self._on_transcription_ready)
         self.voice.status_changed.connect(self._on_voice_status)
         
+        self.tts = TTSManager()
+        self.tts.playback_started.connect(self._on_tts_started)
+        self.tts.playback_finished.connect(self._on_tts_finished)
+        
         self._build_ui()
         self._update_collapsed_state(animated=False)
 
         self.hotkeys = HotkeyThread()
         self.hotkeys.toggle.connect(self.toggle)
-        self.hotkeys.ptt_start.connect(self.voice.start_recording)
-        self.hotkeys.ptt_stop.connect(self.voice.stop_recording)
+        self.hotkeys.toggle_voice.connect(self.toggle_voice_recording)
         self.hotkeys.start()
 
         QApplication.instance().applicationStateChanged.connect(self._on_app_state_changed)
@@ -262,7 +266,6 @@ class Notch(QMainWindow):
             QPushButton:pressed {{ background-color: {ACCENT}; color: #000; }}
         """)
         self.ptt_btn.mousePressEvent = self._on_ptt_press
-        self.ptt_btn.mouseReleaseEvent = self._on_ptt_release
         
         self.input.hide()
         self.ptt_btn.hide()
@@ -306,7 +309,7 @@ class Notch(QMainWindow):
         self.input.hide()
         self.ptt_btn.hide()
         self.notch_label.hide()
-        self.new_chat_btn.show() if self.title.text() else self.new_chat_btn.hide()
+        self.new_chat_btn.hide()
         self._update_collapsed_state()
 
     def _update_collapsed_state(self, animated=True):
@@ -359,11 +362,13 @@ class Notch(QMainWindow):
 
     def _on_ptt_press(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
-            self.voice.start_recording()
+            self.toggle_voice_recording()
             
-    def _on_ptt_release(self, event: QMouseEvent):
-        if event.button() == Qt.MouseButton.LeftButton:
+    def toggle_voice_recording(self):
+        if self.voice.is_recording:
             self.voice.stop_recording()
+        else:
+            self.voice.start_recording()
 
     def _on_transcription_ready(self, text):
         self.input.setText(text)
@@ -374,6 +379,15 @@ class Notch(QMainWindow):
             self.wave_widget.start()
         else:
             self.wave_widget.stop()
+        self._update_collapsed_state()
+
+    def _on_tts_started(self):
+        self.wave_widget.start()
+        self._update_collapsed_state()
+
+    def _on_tts_finished(self):
+        self.wave_widget.stop()
+        self.title.setText("")
         self._update_collapsed_state()
 
     # ---- chat -------------------------------------------------------------
@@ -430,10 +444,15 @@ class Notch(QMainWindow):
 
     def _on_done(self):
         self.input.setDisabled(False)
-        self.input.setPlaceholderText("Ask me anything..")
+        self.input.setPlaceholderText("Ask me anything...")
         self.title.setText("")
         self._update_collapsed_state()
         self.input.setFocus()
+        
+        if self.agent.history and self.agent.history[-1]["role"] == "assistant":
+            content = self.agent.history[-1].get("content", "")
+            if content:
+                self.tts.speak(content)
 
     def _on_error(self, msg):
         print(f"AGENT ERROR: {msg}")
@@ -472,12 +491,6 @@ class Notch(QMainWindow):
                                 f"<br><i>Executing:</i> <b>{html.escape(action_name)}</b>"
                                 f"({args_display}){target_str}"
                             )
-                    elif fn_name == "web_search":
-                        query = c_args.get("query", "")
-                        html_lines.append(
-                            f'<br><span style="color: {MUTED}; font-size: 12px;">'
-                            f'🔍 Searched: &ldquo;{html.escape(query)}&rdquo;</span>'
-                        )
                     else:
                         html_lines.append(f"<br><i>Unknown tool:</i> <b>{html.escape(fn_name)}</b>")
 

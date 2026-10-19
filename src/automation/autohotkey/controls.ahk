@@ -31,7 +31,6 @@ ClearMessage() {
     Sleep(500)
 }
 
-
 ; Copies the given data to the clipboard
 CopyToClipboard(data) {
     if (data = "")
@@ -103,25 +102,6 @@ ClearTextField() {
 
     A_Clipboard := oldClip
     Sleep(500)
-}
-
-ReadFileContent(filePath) {
-    if !FileExist(filePath) {
-        return ""
-    }
-    return FileRead(filePath)
-}
-
-WriteFileContent(filePath, content) {
-    SplitPath(filePath, , &dir)
-    if (dir != "" && !DirExist(dir)) {
-        DirCreate(dir)
-    }
-    if FileExist(filePath) {
-        FileDelete(filePath)
-    }
-    FileAppend(content, filePath, "UTF-8")
-    return true
 }
 
 ; Types literal text

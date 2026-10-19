@@ -1,64 +1,78 @@
 ---
-description: Guide for onboarding a new application to the Notch desktop automation assistant so that the LLM can control it.
+description: Guide for creating automation workflows and onboarding applications to the Notch desktop automation assistant.
 ---
 
-# AHK Automation Skill - App Onboarding
+# AHK Automation & Workflow Authoring Guide
 
-You are an expert AutoHotkey (AHK) v2 developer and AI automation engineer. Use this skill when the user asks you to add support for a new application to the Notch automation assistant.
+Use this guide when creating a new automation workflow or adding app support for the Notch desktop automation assistant.
 
-## Architecture Context
+## Architecture Overview
 
-Notch relies on three key locations to understand and control a new application:
-1. **The Python/AHK Manifest (`ahk_manifest.md`)**: Informs the LLM of the app's variable name and description via the system prompt.
-2. **The Apps Script (`apps.ahk`)**: Defines the actual AHK `WinTitle` string and executable path.
-3. **The Local Knowledge Base (`apps/<Name>.md`)**: Provides the LLM with specific shortcuts and workflows for that application.
+Notch uses a simplified, workflow-centric architecture:
+1. **Workflows (`workflows/<workflow_name>.md`)**: The single source of truth for procedures. Written in plain layman English with standard human keyboard shortcuts (e.g. `Ctrl+S`, `Enter`, `Alt+F4`).
+2. **App Registry (`src/automation/autohotkey/apps.ahk`)**: Central registry defining window titles and executable paths for applications.
+3. **AHK Manifest (`.agents/context/ahk_manifest.md`)**: Defines the available AHK action primitives (`FocusApp`, `TypeText`, `CopyToClipboard`, `Paste`, `SendShortcut`, etc.) and the list of known apps.
 
-## Workflow
+---
 
-When asked to onboard a new app for automation, follow these steps strictly:
+## 1. Creating a New Workflow
 
-### 1. Identify Target App Information
-- Ask the user for the following details (if not already provided):
-  - **App Name** (e.g., `Spotify`)
-  - **Description** (e.g., `Music streaming player`)
-  - **Process Name** (e.g., `Spotify.exe`)
-  - **Full Path to Executable** (e.g., `C:\Users\Username\AppData\Roaming\Spotify\Spotify.exe`)
-- Wait for user approval and details before proceeding.
+To teach Notch a new capability, create a `.md` file in the `workflows/` directory at the project root.
 
-### 2. Update the AHK Manifest
-- **File**: `c:\Flutter Drive\Practice Mode\Responsive Related\workflow\.agents\context\ahk_manifest.md`
-- **Action**: Add a new row to the `## Apps` markdown table.
-- **Format**: `| App_<Name> | <Description> |`
+### Format Requirement
+Every workflow file must have YAML frontmatter with `name` and `description`, followed by numbered markdown headings with layman instructions:
 
-### 3. Update the Apps Script
-- **File**: `c:\Flutter Drive\Practice Mode\Responsive Related\workflow\src\automation\autohotkey\apps.ahk`
-- **Action**: Add the global variable definitions for the new app.
-- **Format**:
-  ```ahk
-  Global App_<Name> := "ahk_exe <Process.exe>"
-  Global App_<Name>_Exec := "C:\Full\Path\To\app.exe"
-  ```
-  *(Make sure to use the exact variable name as defined in the manifest.)*
+```markdown
+---
+name: write_letter
+description: Opens Notepad, writes a letter based on user instructions, and saves it.
+---
 
-### 4. Create App Instruction File for the LLM
-- **File**: `c:\Flutter Drive\Practice Mode\Responsive Related\workflow\.agents\context\apps\<Name>.md`
-  - *Important*: The filename must exactly match the `<Name>` part of `App_<Name>` (no `App_` prefix).
-- **Action**: Create a new markdown file that teaches the LLM how to navigate and use this app.
-- **Format Requirement**: Must contain YAML frontmatter, a `# [<AppName>] Automation Guide` heading, and a Markdown table for shortcuts.
-  ```markdown
-  ---
-  title: <App Name> Automation Guide
-  ---
+# Write Letter in Notepad
 
-  # <App Name> Automation Guide
+## 1. Open Notepad
+Open or switch to Windows Notepad.
 
-  | Shortcut | Description |
-  | --- | --- |
-  | `^n` | New item (example) |
-  | `!f` | Open file menu (example) |
-  ```
-- *Note:* If you are unaware of the specific shortcuts for the app, provide a basic/empty table structure and inform the user that the Notch agent can dynamically update this file when it learns new shortcuts.
+## 2. Write the Letter
+Type or paste the letter content requested by the user into the document.
 
-### 5. Verification
-- Confirm with the user that the manifest, the `apps.ahk` script, and the app instruction file are all correctly populated.
-- Remind the user to restart the Notch application, as the Python backend reads the manifest and `apps.ahk` variables upon startup to build the system prompt for the LLM.
+## 3. Save the File
+Save the document by pressing Ctrl+S.
+```
+
+### Authoring Rules
+- **Layman Language**: Write instructions in simple conversational steps. Non-technical users should be able to create or edit workflows.
+- **Human Shortcuts**: Use human terms like `Ctrl+S`, `Alt+F`, `Enter`, `Win+H`. The LLM automatically converts them to AutoHotkey syntax.
+- **Dynamic Content**: If the workflow needs user data (like a message to write, or a search term), instruct the step to use the content provided by the user.
+- **Live Reload**: Notch dynamically scans the `workflows/` directory on every request—you do not need to restart Notch to test a new or edited workflow.
+
+---
+
+## 2. Onboarding a New Application (If Needed)
+
+If a workflow targets an application that Notch doesn't know about yet:
+
+### Step A: Update `src/automation/autohotkey/apps.ahk`
+Add the app window matcher and executable path:
+```ahk
+Global App_<Name> := "ahk_exe <ProcessName.exe>"
+Global App_<Name>_Exec := "C:\Full\Path\To\executable.exe"
+```
+
+### Step B: Update `## Apps` Table in `.agents/context/ahk_manifest.md`
+Add a row to the table:
+```markdown
+| `App_<Name>` | Application description |
+```
+
+---
+
+## 3. Execution Model
+
+- When the user speaks or types a request, Notch matches it against the workflow catalog.
+- If no workflow matches, Notch politely explains it has not been taught that task yet and lists available workflows. It calls zero tools.
+- When a workflow matches:
+  1. Notch calls `read_workflow` to load the steps.
+  2. The LLM translates the steps into a single batch of `execute_actions`.
+  3. Actions run sequentially in AutoHotkey with fail-fast safety (stops immediately if any action fails).
+  4. Notch confirms completion conversationally to Boss.

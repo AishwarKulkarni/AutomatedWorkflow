@@ -284,6 +284,8 @@ class Notch(QMainWindow):
 
     # ---- expand / collapse ----------------------------------------------
     def toggle(self):
+        self.agent.is_cancelled = True
+        self.tts.stop()
         if not self.isVisible():
             self.show()
         self.expand() if not self.expanded else self.collapse()
@@ -365,6 +367,8 @@ class Notch(QMainWindow):
             self.toggle_voice_recording()
             
     def toggle_voice_recording(self):
+        self.agent.is_cancelled = True
+        self.tts.stop()
         if self.voice.is_recording:
             self.voice.stop_recording()
         else:

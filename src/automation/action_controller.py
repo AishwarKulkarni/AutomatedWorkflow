@@ -31,7 +31,7 @@ class ActionController:
         actions_match = re.search(r"## Actions\s*\n([\s\S]*?)(?=\n## |\Z)", content)
         if actions_match:
             actions_section = actions_match.group(1)
-            found = re.findall(r"\|\s*`?([A-Za-z][A-Za-z0-9_]*)`?\s*\|", actions_section)
+            found = re.findall(r"-\s*\*\*\`?([A-Za-z][A-Za-z0-9_]*)", actions_section)
             seen = set()
             for name in found:
                 if name not in ['Action', 'Signature', 'Description'] and name not in seen:
@@ -43,6 +43,7 @@ class ActionController:
 
     def get_system_prompt_additions(self) -> str:
         """Returns the system prompt block and available apps."""
+        self._manifest = self._load_manifest()
         prompt_block = self._manifest.get("prompt_block", "")
         if prompt_block:
             return prompt_block

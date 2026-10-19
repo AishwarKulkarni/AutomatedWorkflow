@@ -1,13 +1,16 @@
 import json
+import os
 from PyQt6.QtCore import QThread, pyqtSignal
 from .llm_client import LLMClient
 from .tools import AGENT_TOOLS
+from .prompts import BASE_SYSTEM_PROMPT
+from .workflow_manager import get_workflow_catalog_prompt, read_workflow
 from automation.action_controller import ActionController
 
 class AgentManager(QThread):
     """
     A deep module that orchestrates the conversational loop.
-    Owns the history, communicates with the LLM, and executes actions.
+    Owns the history, communicates with the LLM, and executes workflow actions.
     """
     chunk = pyqtSignal(str)
     history_updated = pyqtSignal(list)
@@ -20,7 +23,7 @@ class AgentManager(QThread):
         self.is_cancelled = False
         self.client = LLMClient()
         self.action_controller = action_controller
-        self._new_prompt = None # temporary hold for the latest user prompt
+        self._new_prompt = None
 
     def add_user_message(self, text: str):
         self.history.append({"role": "user", "content": text})
@@ -35,22 +38,15 @@ class AgentManager(QThread):
             if not self.is_cancelled:
                 self.failed.emit("No GROQ_API_KEY set in .env")
             return
-            
+
+        workflow_catalog = get_workflow_catalog_prompt()
         system_additions = self.action_controller.get_system_prompt_additions()
-        
         tools = AGENT_TOOLS
-        
-        system_content = (
-            "You are a helpful desktop automation assistant. "
-            "Keep your responses short, on point, and include a touch of humor. "
-            "Use the execute_actions tool to batch and automate desktop tasks. "
-            "They will be executed sequentially and you will receive a structured result for the batch.\n\n"
-            + system_additions
-        )
+        system_content = f"{BASE_SYSTEM_PROMPT}\n\n{workflow_catalog}\n\n{system_additions}"
 
         while not self.is_cancelled:
             if not self.history or self.history[-1]["role"] == "assistant":
-                break # We wait for user input or tool execution
+                break
 
             messages = [{"role": "system", "content": system_content}] + self.history
 
@@ -58,7 +54,7 @@ class AgentManager(QThread):
                 tool_calls_accumulator = {}
                 self.history.append({"role": "assistant", "content": ""})
                 self.history_updated.emit(self.history)
-                
+
                 for content_chunk, current_tool_calls in self.client.stream_chat(messages, tools, lambda: self.is_cancelled):
                     if self.is_cancelled:
                         break
@@ -70,7 +66,7 @@ class AgentManager(QThread):
 
                 if self.is_cancelled:
                     break
-                    
+
                 if tool_calls_accumulator:
                     parsed_calls = []
                     for idx, tc in sorted(tool_calls_accumulator.items()):
@@ -85,11 +81,11 @@ class AgentManager(QThread):
                             })
                         except Exception:
                             pass
-                            
+
                     if parsed_calls:
                         self.history[-1]["tool_calls"] = parsed_calls
                         self.history_updated.emit(self.history)
-                        
+
                         # Execute all tool calls
                         for call in parsed_calls:
                             if self.is_cancelled:
@@ -100,8 +96,13 @@ class AgentManager(QThread):
                                 args = json.loads(fn.get("arguments", "{}"))
                             except json.JSONDecodeError:
                                 args = {}
-                                
-                            if name == "execute_actions":
+
+                            if name == "read_workflow":
+                                wf_name = args.get("workflow_name", "")
+                                res = read_workflow(wf_name)
+                                result_content = json.dumps(res)
+
+                            elif name == "execute_actions":
                                 actions = args.get("actions", [])
                                 batch_results = []
                                 for action in actions:
@@ -113,9 +114,10 @@ class AgentManager(QThread):
                                     if not res.get("success", False):
                                         break
                                 result_content = json.dumps(batch_results)
+
                             else:
                                 result_content = json.dumps({"success": False, "error": f"Unknown tool: {name}"})
-                                
+
                             self.history.append({
                                 "role": "tool",
                                 "content": result_content,
@@ -123,11 +125,11 @@ class AgentManager(QThread):
                                 "name": name,
                             })
                             self.history_updated.emit(self.history)
-                        
-                        # Continue the loop
+
+                        # Continue the loop to process tool output with LLM
                         continue
-                        
-                # If no tool calls, we are done with this step
+
+                # If no tool calls, we are done with this turn
                 self.finished_ok.emit()
                 break
 

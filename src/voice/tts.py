@@ -19,8 +19,8 @@ class TTSWorker(QThread):
         super().__init__()
         self.text = strip_html(text)
         self.voice = voice
-
     def run(self):
+        temp_file = None
         try:
             fd, temp_file = tempfile.mkstemp(suffix=".mp3")
             os.close(fd)
@@ -35,7 +35,13 @@ class TTSWorker(QThread):
             
             self.finished.emit(temp_file)
         except Exception as e:
+            if temp_file and os.path.exists(temp_file):
+                try:
+                    os.remove(temp_file)
+                except Exception:
+                    pass
             self.failed.emit(str(e))
+
 
 class TTSManager(QObject):
     playback_started = pyqtSignal()
@@ -53,18 +59,22 @@ class TTSManager(QObject):
         if not text.strip():
             return
             
-        # Stop current if playing
+        self.stop()
+
+        self.worker = TTSWorker(text)
+        self.worker.finished.connect(self._on_synthesized)
+        self.worker.failed.connect(lambda e: print(f"TTS Error: {e}"))
+        self.worker.start()
+
+    def stop(self):
         self.player.stop()
         if self._current_file and os.path.exists(self._current_file):
             try:
                 os.remove(self._current_file)
             except Exception:
                 pass
-
-        self.worker = TTSWorker(text)
-        self.worker.finished.connect(self._on_synthesized)
-        self.worker.failed.connect(lambda e: print(f"TTS Error: {e}"))
-        self.worker.start()
+        self._current_file = None
+        self.playback_finished.emit()
 
     def _on_synthesized(self, file_path: str):
         self._current_file = file_path

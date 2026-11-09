@@ -6,10 +6,16 @@
 ;   App_<Name>_Exec  := Full path to the executable, used by FocusApp to launch the app.
 
 Global App_Antigravity := "ahk_exe Antigravity IDE.exe"
-Global App_Antigravity_Exec := "C:\Users\DevAdmin\AppData\Local\Programs\Antigravity IDE\Antigravity IDE.exe"
+Global App_Antigravity_Exec := "C:\Users\aishw_uilu2ha\AppData\Local\Programs\Antigravity IDE\Antigravity IDE.exe"
+
+Global App_AntigravityApp := "ahk_exe Antigravity.exe"
+Global App_AntigravityApp_Exec := "C:\Users\aishw_uilu2ha\AppData\Local\Programs\antigravity\Antigravity.exe"
 
 Global App_Notepad := "ahk_exe Notepad.exe"
 Global App_Notepad_Exec := "C:\Windows\System32\notepad.exe"
 
 Global App_Brave := "ahk_exe brave.exe"
 Global App_Brave_Exec := "C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"
+
+Global App_ChatGPT := "ChatGPT"
+Global App_ChatGPT_Exec := "explorer.exe shell:AppsFolder\OpenAI.Codex_2p2nqsd0c76g0!App"

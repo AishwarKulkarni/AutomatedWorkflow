@@ -1,142 +1,145 @@
 ---
 name: create-automation
-description: Guide for creating automation workflows, onboarding applications, and defining new desktop capabilities for the Notch desktop automation assistant.
+description: Research and create new Notch app usage guides in instructions/, including verified shortcuts, navigation patterns, and safe operating steps.
 ---
 
-# AHK Automation & Workflow Authoring Guide
+# Notch App Instruction Authoring Guide
 
-Use this guide when creating a new automation workflow, defining new desktop actions, or onboarding applications to the Notch desktop automation assistant.
+Use this guide when the user asks to create a new instruction guide for a desktop application. These files explain how to use a given app: its interface, common tasks, navigation, and shortcuts. They are app reference material, not a list of tasks Notch is authorized to perform. Use `update-instructions` when the user asks to revise an existing guide.
 
----
+## 1. Check the existing system first
 
-## 1. Architecture Overview
+Before writing a guide, identify the exact application and, when relevant, its version, operating system, edition, and desktop or web variant. Inspect:
 
-Notch uses a declarative, fail-fast, workflow-centric architecture:
+- Existing files in `instructions/` for app coverage, overlap, naming, and conventions.
+- `.agents/context/ahk_manifest.md` for allowed action primitives and app target names.
+- `src/automation/autohotkey/apps.ahk` when the requested app might not be registered.
+- `src/agent/workflow_manager.py` for the current instruction file metadata and loading contract.
 
-1. **Workflow Definitions ([`workflows/<workflow_name>.md`](file:///c:/Flutter%20Drive/Personal%20Workspace/AutomatedWorkflow/workflows))**:
-   - The single source of truth for procedures.
-   - Written in layman terms with standard keyboard shortcuts (e.g. `Ctrl+S`, `Enter`, `Alt+F4`).
-   - Parsed at runtime by [`workflow_manager.py`](file:///c:/Flutter%20Drive/Personal%20Workspace/AutomatedWorkflow/src/agent/workflow_manager.py) and injected into the LLM system prompt catalog.
-2. **App Registry ([`src/automation/autohotkey/apps.ahk`](file:///c:/Flutter%20Drive/Personal%20Workspace/AutomatedWorkflow/src/automation/autohotkey/apps.ahk))**:
-   - Central registry defining window title matchers (`App_<Name>`) and launch executable paths (`App_<Name>_Exec`).
-3. **AHK Manifest ([`.agents/context/ahk_manifest.md`](file:///c:/Flutter%20Drive/Personal%20Workspace/AutomatedWorkflow/.agents/context/ahk_manifest.md))**:
-   - Single source of truth for LLM-allowed action primitives (`FocusApp`, `TypeText`, `CopyToClipboard`, `Paste`, `SendShortcut`, `ClearTextField`, etc.).
-   - Parsed by [`ActionController`](file:///c:/Flutter%20Drive/Personal%20Workspace/AutomatedWorkflow/src/automation/action_controller.py) to validate action names and generate system prompts.
-4. **Persistent Subprocess Bridge ([`src/automation/ahk_bridge.py`](file:///c:/Flutter%20Drive/Personal%20Workspace/AutomatedWorkflow/src/automation/ahk_bridge.py))**:
-   - Spawns and manages a persistent AutoHotkey v2 daemon ([`agent_runner.ahk`](file:///c:/Flutter%20Drive/Personal%20Workspace/AutomatedWorkflow/src/automation/autohotkey/agent_runner.ahk)) that executes batch actions over line-delimited JSON on `stdin`/`stdout`.
+Research the app's keyboard shortcuts deliberately. Verify behavior from authoritative, current sources, prioritizing official app documentation and vendor shortcut references. Note OS-specific differences and distinguish confirmed shortcuts from unverified conventions. Browse when official documentation is not available locally. Name or link sources in the guide. Do not invent shortcuts, controls, or features; omit uncertain claims from operational steps.
 
----
+Do not claim that an app or action is available unless it appears in the manifest and is implemented. Prefer the existing supported actions and keyboard shortcuts. If the request needs a new app or primitive, make the necessary supporting code and manifest changes as well; describe the limit to the user if it cannot safely be implemented.
 
-## 2. Creating a New Workflow
+## 2. Instruction file contract
 
-To teach Notch a new capability, create a `.md` file inside [`workflows/`](file:///c:/Flutter%20Drive/Personal%20Workspace/AutomatedWorkflow/workflows) (e.g., `workflows/search_brave.md`).
+Create a new Markdown file under `instructions/`. Use a lowercase snake_case filename based on the app, such as `brave_browser.md` or `notepad.md`. The filename stem should match the guide `name`.
 
-### Required Structure
-
-Every workflow file must have YAML frontmatter (`name` and `description`) followed by numbered markdown headings with step-by-step instructions:
+The parser supports simple, single-line `name` and `description` frontmatter. Keep these values on one line and avoid YAML features such as folded or multiline strings.
 
 ```markdown
 ---
-name: search_brave
-description: Opens the Brave browser, creates a new tab, and searches for user-specified text.
+name: brave_browser
+description: Usage guide for navigating Brave, managing tabs, and using verified browser shortcuts.
 ---
 
-# Search the Web in Brave
+# Brave Browser Usage Guide
 
-## 1. Open Brave Browser
-Bring Brave Browser to the foreground, launching it if it is not currently open.
+## App and platform
+...
 
-## 2. Open a New Tab
-Press Ctrl+T to open a new tab.
+## Interface map
+...
 
-## 3. Type the Search Query
-Type the query requested by the user into the address bar.
+## Verified shortcuts
+...
 
-## 4. Execute the Search
-Press Enter to navigate.
+## Common operations
+...
+
+## Safety and recovery
+...
+
+## Sources
+...
 ```
 
-### Authoring Guidelines
+The guide should be a practical reference for an agent operating the named app. Describe reusable operations, not just one user-requested task.
 
-1. **Clear, Layman English**: Write instructions in plain conversational steps. The LLM translates layman descriptions into atomic action primitives.
-2. **Standard Shortcut Terms**: Refer to shortcuts using standard human conventions (`Ctrl+S`, `Ctrl+T`, `Alt+F4`, `Enter`, `Tab`). The LLM translates them to AHK syntax (`^s`, `^t`, `!{F4}`, `{Enter}`, `{Tab}`).
-3. **Dynamic User Content**: When the workflow requires user parameters (e.g. text to write, query to search, recipient name), specify that the step uses content provided by Boss.
-4. **Prefer Clipboard for Long Text**: Instruct workflows that insert dynamic or multi-line text to paste from clipboard rather than typing character-by-character.
-5. **Hot-Reloadable**: Notch rescans [`workflows/`](file:///c:/Flutter%20Drive/Personal%20Workspace/AutomatedWorkflow/workflows) on every request turn. You do not need to restart the application to test a new or edited workflow.
+## 3. Write a complete app guide
 
----
+Cover the app and platform/version scope, main interface areas and focus behavior, verified keyboard shortcuts by purpose, detailed reusable operations, text/input handling, safety and recovery cases, and sources with links and platform/version coverage. Explain prerequisites, which view or control must be active, how to reach a feature, and what state should result. Include useful app-specific shortcuts for navigation, editing, search, tabs/windows, save/open, and other core functions. Distinguish app shortcuts from operating-system shortcuts and explain `Ctrl`/`Command` differences. A shortcut list without usage context is insufficient.
 
-## 3. Onboarding a New Application
+Use plain, direct English and concrete steps. Do not assume the agent can inspect UI state unless the available actions support it. Explain where confidence is limited and omit claims that cannot be supported.
 
-If your workflow interacts with an application that Notch does not yet recognize:
+### Example of app guide structure
 
-### Step 1: Update App Registry (`src/automation/autohotkey/apps.ahk`)
-Add the window identifier (`WinTitle`) and executable path. Use portable path expansions where applicable:
-```ahk
-Global App_Slack := "ahk_exe slack.exe"
-Global App_Slack_Exec := "C:\Users\username\AppData\Local\slack\slack.exe"
-```
-
-### Step 2: Update Manifest (`.agents/context/ahk_manifest.md`)
-Add the application to the `## Apps` table:
 ```markdown
-| `App_Slack` | Slack desktop messaging client |
-```
-
+---
+name: brave_browser
+description: Usage guide for navigating Brave and using verified browser shortcuts.
 ---
 
-## 4. Adding a New Action Primitive (If Needed)
+# Brave Browser Usage Guide
 
-If an automation requires a primitive beyond existing controls (`FocusApp`, `TypeText`, `CopyToClipboard`, `Paste`, `SendShortcut`, `ClearTextField`, `ClickAt`, `ToggleVoiceTyping`):
+## App and platform
+Brave Browser for Windows (state the researched version scope).
 
-### Step 1: Implement the Function in `src/automation/autohotkey/controls.ahk`
-Write an AutoHotkey **v2** function:
-```ahk
-; Scrolls the active window down or up
-ScrollWindow(direction) {
-    if (direction = "up") {
-        Send("{WheelUp 5}")
-    } else {
-        Send("{WheelDown 5}")
-    }
-    Sleep(300)
-}
+## Interface map
+Describe the address bar, tabs, menus, and relevant focus behavior.
+
+## Verified shortcuts
+List researched shortcuts with their purpose and source.
+
+## Common operations
+Describe reusable app operations with prerequisites and expected states.
+
+## Safety and recovery
+Document focus hazards, dialogs, and conditions to stop.
+
+## Sources
+Link authoritative app documentation and shortcut references.
 ```
 
-### Step 2: Register in `.agents/context/ahk_manifest.md`
-Add the function signature to the `## Actions` section:
-```markdown
-- **`ScrollWindow(direction)`**: Scroll the active window 'up' or 'down'.
-```
-> [!IMPORTANT]
-> `ActionController` uses a regex on `## Actions` (`-\s*\*\*\`?([A-Za-z][A-Za-z0-9_]*)`) to whitelist callable actions. If it is not listed in `ahk_manifest.md`, `ActionController` will reject the action call before dispatching to AHK.
+This example is a structure guide; include only details relevant to the actual workflow.
 
----
+## 4. Safety and scope
 
-## 5. Runtime Execution & Safety Lifecycle
+- A guide is reference knowledge; it does not by itself authorize Notch to perform every operation described. Follow the current runtime approval and action-gating rules.
+- Start app interaction by focusing the specified registered target. Never assume focus succeeded or send keystrokes after a focus failure.
+- Prefer keyboard shortcuts to coordinate clicks. Use `ClickAt` only when the UI has no practical keyboard route, and only when the target and coordinates are stable enough to be safe.
+- Keep action sequences bounded to the requested outcome. Do not add extra cleanup, navigation, or content changes that the user did not request.
+- Treat sending messages, submitting forms, deleting or overwriting data, purchasing, publishing, and other consequential actions with care. The workflow must not infer recipients, destinations, or irreversible choices. If a consequential choice is ambiguous or not explicitly requested, stop and ask the user.
+- The action batch is fail-fast. Once an action fails or the observed state differs from what the next step requires, do not continue issuing dependent actions.
+- Never promise a verification method unavailable to the current action set. The system primarily performs keyboard actions; it may not be able to inspect arbitrary UI state.
 
-When the user gives an instruction:
+## 5. Use supported actions accurately
 
-```
-User Query (Voice or Text)
-           │
-           ▼
-Check against Workflow Catalog
-           ├────────────────────────────┐
-           │ [No Match]                 │ [Match Found]
-           ▼                            ▼
-Politely refuse without calling   1. Call read_workflow(workflow_name)
-tools; explain available tasks          │
-                                        ▼
-                                  2. Compile steps to single batch execute_actions
-                                        │
-                                        ▼
-                                  3. ActionController validates whitelist against ahk_manifest.md
-                                        │
-                                        ▼
-                                  4. AHKBridge dispatches via stdin to agent_runner.ahk
-                                        │ (Fail-fast: halts if any step fails)
-                                        ▼
-                                  5. Notch confirms completion aloud to Boss (plain text, no markdown)
-```
+Only direct the agent to use actions listed in `.agents/context/ahk_manifest.md`. The current manifest may include `FocusApp`, `TypeText`, `CopyToClipboard`, `Paste`, `ClickAt`, `SendShortcut`, `ShowMessage`, `ClearMessage`, `ClearTextField`, and `ToggleVoiceTyping`; check the file because this list can change.
 
+Important conventions:
+
+- `FocusApp` requires the registered `target_app` name.
+- `TypeText` is for short literal text. Use clipboard plus paste for long text.
+- `SendShortcut` takes AHK shortcut syntax at execution time; in workflow prose, write familiar names (`Ctrl+S`, `Alt+F4`, `Enter`).
+- `ClickAt` requires coordinates and should be a last resort.
+- Pass a manifest app variable such as `App_Notepad` or `App_Brave` as `target_app`; do not invent target names.
+
+## 6. Add application or action support when necessary
+
+### New application
+
+If the workflow requires an unregistered app, add a reliable window matcher and launch executable in `src/automation/autohotkey/apps.ahk`, then document the target in the `## Apps` table in `.agents/context/ahk_manifest.md`. Follow existing AHK v2 patterns and avoid machine-specific paths when a portable or environment-derived path is available. If a dependable launch path or window matcher is unknown, do not guess; explain what information is missing.
+
+### New action primitive
+
+Add a primitive only when the task cannot be safely expressed using existing actions. Implement it in the appropriate AHK v2 control code, register its signature and clear behavior description under `## Actions` in `.agents/context/ahk_manifest.md`, and ensure its arguments match the Python validation and JSON IPC contract. Never place an unimplemented action in a workflow. Follow the repository's fail-fast and window-focus safety rules.
+
+## 7. Keep the instruction catalog and project context accurate
+
+Instruction files live in `instructions/` and are loaded by `workflow_manager.py` (the module name may remain until a separate refactor). Keep descriptions concise and clear about which app the guide covers. A guide provides reference knowledge; follow the runtime's current approval and action-gating rules.
+
+When a change affects features, dependencies, tools, or architectural boundaries, update `CONTEXT.md` as required by the repository's `AGENTS.md`. A guide-only content change normally does not change architecture context.
+
+## 8. Final review
+
+Before finishing, confirm that:
+
+- The guide is in `instructions/` and has valid single-line `name` and `description` frontmatter.
+- Its filename and guide name agree and identify the app.
+- It documents reusable app operations, interface details, shortcuts, and safety conditions.
+- Shortcut claims are sourced, with platform and version differences stated.
+- Every named app and action exists in the current manifest/implementation.
+- The guide does not imply blanket authorization for app operations or rely on guessed facts.
+- Any required app/action support and manifest documentation are included.
+
+Summarize the guide and research sources, and mention any supporting app/action changes. Do not claim runtime verification unless it was actually performed.

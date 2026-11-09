@@ -4,7 +4,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-WORKFLOWS_DIR = os.path.join(os.getcwd(), "workflows")
+INSTRUCTIONS_DIR = os.path.join(os.getcwd(), "instructions")
 
 def _parse_frontmatter(content: str) -> tuple[dict, str]:
     """Extracts simple key-value YAML frontmatter and body."""
@@ -24,22 +24,22 @@ def _parse_frontmatter(content: str) -> tuple[dict, str]:
 
 def scan_workflows() -> dict[str, dict]:
     """
-    Scans the workflows/ directory and returns metadata for all .md files.
+    Scans the instructions/ directory and returns metadata for all .md files.
     Tolerates formatting errors without raising exceptions.
     """
     workflows = {}
-    if not os.path.exists(WORKFLOWS_DIR):
+    if not os.path.exists(INSTRUCTIONS_DIR):
         try:
-            os.makedirs(WORKFLOWS_DIR, exist_ok=True)
+            os.makedirs(INSTRUCTIONS_DIR, exist_ok=True)
         except OSError as e:
-            logger.warning(f"Could not create workflows directory: {e}")
+            logger.warning(f"Could not create instructions directory: {e}")
             return workflows
 
-    for filename in os.listdir(WORKFLOWS_DIR):
+    for filename in os.listdir(INSTRUCTIONS_DIR):
         if not filename.endswith(".md"):
             continue
 
-        file_path = os.path.join(WORKFLOWS_DIR, filename)
+        file_path = os.path.join(INSTRUCTIONS_DIR, filename)
         stem = os.path.splitext(filename)[0]
 
         try:
@@ -58,7 +58,7 @@ def scan_workflows() -> dict[str, dict]:
                         description = cleaned
                         break
                 if not description:
-                    description = f"Workflow for {name}"
+                    description = f"App instructions for {name}"
 
             workflows[name.lower()] = {
                 "name": name,
@@ -77,7 +77,7 @@ def get_workflow_catalog_prompt() -> str:
     if not workflows:
         return (
             "## Available Workflows\n"
-            "Currently no workflows are defined in the workflows/ directory. "
+            "Currently no workflows are defined in the instructions/ directory. "
             "You cannot perform desktop automation actions until a workflow is created.\n\n"
         )
 
@@ -121,3 +121,4 @@ def read_workflow(workflow_name: str) -> dict:
         "workflow_name": matched["name"],
         "content": matched["content"]
     }
+

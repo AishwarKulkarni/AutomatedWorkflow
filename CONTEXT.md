@@ -2,11 +2,11 @@
 
 ## Overview
 
-**Notch** is a Python-based desktop AI assistant featuring a floating, dynamic-island-style borderless UI built with PyQt6. It runs continuously in the background and can be summoned using global hotkeys (`Ctrl+Space` to toggle the UI, and `` ` `` for push-to-talk voice interaction). 
+**Notch** is a Python-based desktop AI assistant featuring a floating, dynamic-island-style borderless UI built with PyQt6. It runs continuously in the background and can be summoned using global hotkeys (`Ctrl+Space` to toggle the UI, and `` ` `` for push-to-talk voice interaction).
 
 Notch combines natural voice interaction (Speech-to-Text via `faster-whisper` and Text-to-Speech via `edge-tts`) with a streaming conversational agent powered by the Groq API. For desktop actions, Notch interacts with Windows through a persistent AutoHotkey v2 (AHK) subprocess that executes structured, batch automation sequences.
 
-Execution is protected by a **Strict Workflow Gate**: Notch only performs desktop automation if the user's intent matches a predefined workflow catalog in `workflows/`.
+Desktop automation uses a strict catalog gate: Notch only performs actions supported by the current app instruction catalog in `instructions/` and the AHK action manifest.
 
 ---
 
@@ -47,14 +47,14 @@ Execution is protected by a **Strict Workflow Gate**: Notch only performs deskto
    - **Keyboard:** The user toggles the UI with `Ctrl+Space` and types into the notch search box.
    - **Voice:** The user presses or toggles `` ` `` (backtick). `VoiceTranscriber` records 16kHz audio via `sounddevice` and transcribes it locally using `faster-whisper`.
 2. **Catalog & Prompt Assembly:**
-   - `AgentManager` injects `BASE_SYSTEM_PROMPT` (Notch persona: plain-text conversational, no markdown formatting, addresses user as "Boss"), dynamically scans `workflows/` via `workflow_manager.py` to build the catalog, and attaches available target apps from `ActionController`.
+   - `AgentManager` injects `BASE_SYSTEM_PROMPT` (Notch persona: plain-text conversational, no markdown formatting, addresses user as "Boss"), dynamically scans `instructions/` via `workflow_manager.py` to build the catalog, and attaches available target apps from `ActionController`.
 3. **LLM Invocation & Streaming:**
-   - `LLMClient` opens a streaming SSE connection to Groq API (`/chat/completions`) offering tools: `read_workflow` and `execute_actions`.
+   - `LLMClient` opens a streaming SSE connection to Groq API (`/chat/completions`) offering tools: `read_workflow` and `execute_actions`. HTTP 429 rate limits are retried up to three times with `Retry-After` or exponential backoff, and pending retries stop when the user cancels.
    - Text chunks are streamed directly to the UI chat browser and spoken aloud via `TTSManager` (`edge-tts`).
 4. **Two-Step Workflow Execution:**
-   - If a request matches an available workflow, the LLM first calls `read_workflow` with the target workflow name to retrieve its steps.
-   - The LLM compiles the layman workflow steps into a structured `execute_actions` batch call.
-   - If no workflow matches, the LLM refuses action execution conversationally and suggests available workflows.
+   - If a request matches the app instruction catalog, the LLM first calls `read_workflow` with the guide name to retrieve app usage details.
+   - The LLM uses the guide as reference while compiling a structured `execute_actions` batch call.
+   - If no catalog entry applies, the LLM declines unsupported desktop actions and explains the available app guides.
 5. **Action Validation & Dispatch:**
    - `ActionController` validates action names against `.agents/context/ahk_manifest.md` (the Single Source of Truth for allowed actions).
    - Valid actions are dispatched to `AHKBridge`.
@@ -73,7 +73,7 @@ Execution is protected by a **Strict Workflow Gate**: Notch only performs deskto
 - `run_notch.bat`: Quick launcher activating `venv` and starting `src/main.py`.
 - `CONTEXT.md`: This architecture context file.
 - `AGENTS.md`: Guidelines and context for AI coding assistants working on this repo.
-- `workflows/`: Markdown files defining approved workflows with YAML frontmatter (e.g., `notepad_letter.md`).
+- `instructions/`: Markdown files with detailed app usage guides and researched shortcuts with YAML frontmatter (for example, `brave_web_navigation.md`).
 - `conversations/`: Auto-saved user chat transcripts with timestamps.
 - `.agents/context/ahk_manifest.md`: Single source of truth defining available AHK actions, app mappings, and AI automation guidelines.
 
@@ -86,10 +86,10 @@ Execution is protected by a **Strict Workflow Gate**: Notch only performs deskto
   - Integrates `VoiceTranscriber`, `TTSManager`, and `AgentManager`.
 - **`agent/`**:
   - `agent.py` (`AgentManager`): `QThread` running the conversational loop, parsing tool calls, and coordinating execution.
-  - `llm_client.py` (`LLMClient`): Streams chat completions from Groq's API with cancellation support.
+  - `llm_client.py` (`LLMClient`): Streams chat completions from Groq's API with cancellation support and bounded 429 retry handling.
   - `tools.py` (`AGENT_TOOLS`): OpenAI-compatible tool specifications for `read_workflow` and `execute_actions`.
   - `prompts.py` (`BASE_SYSTEM_PROMPT`): Persona instructions (plain text speech, Boss styling, workflow rules).
-  - `workflow_manager.py`: Parses frontmatter and steps from `workflows/*.md` and generates catalog prompts.
+  - `workflow_manager.py`: Parses frontmatter and steps from `instructions/*.md` and generates catalog prompts.
 - **`voice/`**:
   - `transcriber.py` (`VoiceTranscriber`): Streams microphone input via `sounddevice` and transcribes using `faster-whisper` (`base` model, `int8` CPU).
   - `tts.py` (`TTSManager`, `TTSWorker`): Generates speech using `edge-tts` (`en-US-AriaNeural`) and plays back via Qt Multimedia (`QMediaPlayer`).
@@ -102,7 +102,7 @@ Execution is protected by a **Strict Workflow Gate**: Notch only performs deskto
 
 ### `src/automation/autohotkey/` (AHK Scripts)
 - **`agent_runner.ahk`**: Persistent daemon script reading JSON commands on `stdin` and returning JSON results on `stdout`.
-- **`apps.ahk`**: Application target titles (`WinTitle`) and executable paths (`App_Notepad`, `App_Brave`, `App_Antigravity`).
+- **`apps.ahk`**: Application target titles (`WinTitle`) and executable paths, including separate `App_Antigravity` (IDE) and `App_AntigravityApp` (standalone agent app) targets.
 - **`controls.ahk`**: Core implementation of automation actions (`FocusApp`, `SendShortcut`, `TypeText`, `CopyToClipboard`, `Paste`, `ClickAt`, `ToggleVoiceTyping`).
 - **`libraries/JSON.ahk`**: AHK v2 JSON parsing and stringifying library.
 
@@ -123,7 +123,7 @@ Execution is protected by a **Strict Workflow Gate**: Notch only performs deskto
 
 | Tool | Purpose | Schema |
 |---|---|---|
-| `read_workflow` | Reads the full instructions and steps of a specific workflow from `workflows/`. | `{ workflow_name: string }` |
+| `read_workflow` | Reads a specific app usage guide from `instructions/` (legacy tool name). | `{ workflow_name: string }` |
 | `execute_actions` | Executes an array of desktop automation actions sequentially as a single batch. | `{ actions: [{ action_name, args[], target_app? }] }` |
 
 ---
@@ -135,3 +135,5 @@ Execution is protected by a **Strict Workflow Gate**: Notch only performs deskto
 3. **Fail-Fast Safety:** If any action within an `execute_actions` batch fails, execution terminates immediately to avoid typing into unintended windows.
 4. **Persistent IPC Daemon:** Rather than launching a new AHK process per command, `AHKBridge` maintains a long-lived subprocess with thread-safe request serialization.
 5. **No Markdown in Agent Responses:** Responses are delivered conversationally in plain text as if spoken aloud (suitable for direct TTS consumption).
+
+

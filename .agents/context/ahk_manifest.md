@@ -15,9 +15,11 @@ before they are sent to AHK.
 
 | Variable Name     | Description                                      |
 | ----------------- | ------------------------------------------------ |
-| `App_Antigravity` | Antigravity IDE — the AI coding assistant window |
+| `App_Antigravity` | Google Antigravity IDE — standalone code editor with integrated agent features; not the separate Antigravity App desktop command center |
+| `App_AntigravityApp` | Google Antigravity App — separate standalone agent command center, launched as `Antigravity.exe`; not the IDE |
 | `App_Notepad`     | Windows Notepad — plain-text editor              |
 | `App_Brave`       | Web Browser                                      |
+| `App_ChatGPT`     | ChatGPT desktop app                              |
 
 Pass the **variable name** (e.g. `App_Notepad`) as the `target_app` argument.
 Actions that do not need a window context (e.g. `TypeText`, `ClickAt`, `SendShortcut`) may omit `target_app`.

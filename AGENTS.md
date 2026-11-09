@@ -11,8 +11,8 @@ For an architectural breakdown and technology stack reference, see [CONTEXT.md](
 1. **Deep Modules:** Classes like `AgentManager`, `ActionController`, `AHKBridge`, `VoiceTranscriber`, and `TTSManager` must hide implementation complexity behind simple, clean interfaces.
 2. **Single Source of Truth:** 
    - AHK actions and capabilities: documented in [`.agents/context/ahk_manifest.md`](file:///c:/Flutter%20Drive/Personal%20Workspace/AutomatedWorkflow/.agents/context/ahk_manifest.md).
-   - Executable user workflows: stored as markdown files with frontmatter in [`workflows/`](file:///c:/Flutter%20Drive/Personal%20Workspace/AutomatedWorkflow/workflows).
-3. **Fail-Fast Desktop Safety:** Never execute blind or unsolicited keystrokes. Workflows must be explicitly gatechecked against approved catalog files before calling tools.
+   - App usage guides: stored as markdown files with frontmatter in [`instructions/`](file:///c:/Flutter%20Drive/Personal%20Workspace/AutomatedWorkflow/instructions). Guides should explain how to use an app and include researched, sourced shortcuts.
+3. **Fail-Fast Desktop Safety:** Never execute blind or unsolicited keystrokes. Desktop actions must be checked against the instruction catalog and approved action manifest before calling tools.
 4. **TTS-Friendly Spoken Output:** The LLM output is spoken aloud by `edge-tts`. Keep agent persona prompts instruction-free from markdown bullets, bolding, asterisks, or markdown tables.
 
 ---
@@ -32,18 +32,18 @@ For an architectural breakdown and technology stack reference, see [CONTEXT.md](
 
 ---
 
-## 3. Modifying & Adding Workflows
+## 3. Modifying & Adding App Instructions
 
 To teach Notch a new capability:
-1. Create a markdown file in [`workflows/`](file:///c:/Flutter%20Drive/Personal%20Workspace/AutomatedWorkflow/workflows) (e.g. `workflows/my_workflow.md`).
+1. Create an app usage guide in [`instructions/`](file:///c:/Flutter%20Drive/Personal%20Workspace/AutomatedWorkflow/instructions) (e.g. `instructions/my_app.md`).
 2. Add YAML frontmatter at the top:
    ```markdown
    ---
-   name: my_workflow
-   description: Brief description of what the workflow does.
+   name: my_app
+   description: Brief description of the app and usage covered by the guide.
    ---
    ```
-3. Describe the human-readable steps in markdown headers and text. `workflow_manager.py` will automatically register the workflow upon scan.
+3. Research the app, especially its shortcuts, and cite authoritative sources. Describe the interface and reusable app operations. `workflow_manager.py` will register the guide upon scan.
 
 ---
 
@@ -51,4 +51,6 @@ To teach Notch a new capability:
 
 Whenever you change features, dependencies, tools, or architectural boundaries:
 - **Always update [CONTEXT.md](file:///c:/Flutter%20Drive/Personal%20Workspace/AutomatedWorkflow/CONTEXT.md)** to keep context accurate for subsequent agent sessions.
+
+
 
